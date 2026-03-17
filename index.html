@@ -1,0 +1,3163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Arrow Maze</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800;900&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: linear-gradient(170deg, #c8f5a0 0%, #a8e063 50%, #7dc95e 100%);
+    min-height: 100dvh;
+    display: flex; flex-direction: column; align-items: center;
+    overflow: hidden; color: #2d5a1b;
+  }
+
+  #topbar {
+    width: 100%; max-width: 480px;
+    display: flex; align-items: center;
+    padding: 16px 20px 8px; gap: 10px;
+  }
+  .icon-btn {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: rgba(255,255,255,.55); border: none;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: transform .12s, background .12s; flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  }
+  .icon-btn:active { transform: scale(.88); background: rgba(255,255,255,.75); }
+  .icon-btn svg { width: 20px; height: 20px; fill: #3a7d1e; }
+  #level-label {
+    font-size: 13px; font-weight: 800; color: #3a7d1e;
+    letter-spacing: .1em; text-transform: uppercase;
+    text-shadow: 0 1px 0 rgba(255,255,255,.5);
+    min-width: 64px; text-align: center;
+  }
+  #level-nav {
+    display: flex; align-items: center; gap: 2px; margin-left: 8px;
+  }
+  .level-nav-btn {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: rgba(255,255,255,.5); border: none;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: transform .12s, background .12s;
+    flex-shrink: 0;
+  }
+  .level-nav-btn:active { transform: scale(.85); background: rgba(255,255,255,.8); }
+  .level-nav-btn:disabled { opacity: .3; cursor: default; pointer-events: none; }
+  .level-nav-btn svg { width: 16px; height: 16px; fill: #3a7d1e; }
+  #lives { display: flex; gap: 6px; margin-left: auto; }
+  .heart { font-size: 22px; transition: transform .3s cubic-bezier(.36,.07,.19,.97), opacity .3s; }
+  .heart.lost { opacity: .2; transform: scale(.7); }
+
+  #stage {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    width: 100%; padding: 12px; position: relative;
+  }
+  #maze-wrap {
+    position: relative;
+    filter: drop-shadow(0 8px 24px rgba(45,90,27,.35));
+  }
+  canvas#maze { display: block; border-radius: 20px; cursor: pointer; touch-action: none; }
+  #hint { margin-top: 14px; font-size: 13px; font-weight: 800; color: #3a7d1e;
+          text-shadow: 0 1px 0 rgba(255,255,255,.4); }
+
+  .overlay {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: rgba(168,224,99,.88); backdrop-filter: blur(10px);
+    z-index: 100; gap: 16px; opacity: 0; pointer-events: none; transition: opacity .35s;
+  }
+  .overlay.show { opacity: 1; pointer-events: all; }
+  .ov-icon { font-size: 72px; animation: popIn .4s cubic-bezier(.36,.07,.19,.97) both; }
+  .ov-title { font-size: 34px; font-weight: 900; color: #1e4d0a; animation: popIn .4s .08s cubic-bezier(.36,.07,.19,.97) both; }
+  .ov-sub { font-size: 15px; color: #3a7d1e; animation: popIn .4s .14s cubic-bezier(.36,.07,.19,.97) both; }
+  .ov-btn {
+    margin-top: 10px; padding: 14px 40px; border-radius: 50px; border: none;
+    font-family: 'Nunito', sans-serif; font-size: 18px; font-weight: 800;
+    cursor: pointer; transition: transform .12s;
+    animation: popIn .4s .2s cubic-bezier(.36,.07,.19,.97) both;
+    box-shadow: 0 4px 14px rgba(0,0,0,.18);
+  }
+  .ov-btn:active { transform: scale(.93); }
+  .btn-win  { background: #ff9f43; color: #fff; }
+  .btn-lose { background: #ee5a24; color: #fff; }
+
+  /* ── OBSTACLE INFO OVERLAY ── */
+  #ov-info {
+    position: fixed; inset: 0; z-index: 150;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(30,60,10,.55); backdrop-filter: blur(12px);
+    opacity: 0; pointer-events: none;
+    transition: opacity .3s;
+  }
+  #ov-info.show { opacity: 1; pointer-events: all; }
+
+  .info-card {
+    background: rgba(255,255,255,0.75);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-radius: 28px;
+    padding: 32px 28px 24px;
+    width: min(340px, 88vw);
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.25);
+    animation: cardIn .35s cubic-bezier(.34,1.56,.64,1) both;
+  }
+  @keyframes cardIn { from{opacity:0;transform:scale(.7) translateY(20px)} to{opacity:1;transform:none} }
+
+  .info-card canvas { border-radius: 16px; }
+
+  .info-badge {
+    font-size: 11px; font-weight: 900; letter-spacing: .12em;
+    text-transform: uppercase; padding: 4px 12px; border-radius: 20px;
+    background: #f0fdf4; color: #16a34a;
+  }
+  .info-badge.new { background: #fef9c3; color: #ca8a04; }
+
+  .info-name {
+    font-size: 26px; font-weight: 900; color: #1a1a2e; text-align: center;
+  }
+  .info-desc {
+    font-size: 15px; font-weight: 600; color: #4b5563; text-align: center;
+    line-height: 1.55;
+  }
+  .info-ok {
+    margin-top: 6px; padding: 13px 44px; border-radius: 50px; border: none;
+    font-family: 'Nunito', sans-serif; font-size: 17px; font-weight: 800;
+    cursor: pointer; transition: transform .12s;
+    box-shadow: 0 4px 14px rgba(0,0,0,.15);
+  }
+  .info-ok:active { transform: scale(.93); }
+
+  .particle {
+    position: fixed; pointer-events: none; font-size: 18px; z-index: 200;
+    animation: flyOut .75s ease-out forwards;
+  }
+  @keyframes flyOut { to{opacity:0;transform:translate(var(--tx),var(--ty)) scale(0)} }
+  @keyframes shake {
+    0%,100%{transform:translateX(0)}
+    20%{transform:translateX(-9px)} 40%{transform:translateX(9px)}
+    60%{transform:translateX(-6px)} 80%{transform:translateX(4px)}
+  }
+  .shaking { animation: shake .4s ease both; }
+
+  /* ── WELCOME SCREEN ── */
+  #welcome-screen {
+    position: fixed; inset: 0; z-index: 300;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(160deg, #c8f5a0 0%, #7dc95e 60%, #4a9e2e 100%);
+    transition: opacity .5s, transform .5s;
+  }
+  #welcome-screen.hide { opacity: 0; pointer-events: none; transform: scale(1.04); }
+  #welcome-inner { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+  #welcome-title {
+    font-size: 54px; font-weight: 900; color: #1a4d0a; text-align: center;
+    line-height: 1.0; letter-spacing: -.01em;
+    text-shadow: 0 3px 0 rgba(255,255,255,.35), 0 6px 18px rgba(0,0,0,.18);
+  }
+  #welcome-canvas { border-radius: 26px; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+  #btn-start {
+    padding: 16px 60px; border-radius: 50px; border: none;
+    font-family: 'Nunito', sans-serif; font-size: 22px; font-weight: 900;
+    background: #ff9f43; color: #fff; cursor: pointer; letter-spacing: .04em;
+    box-shadow: 0 6px 24px rgba(255,159,67,.5);
+    transition: transform .12s, box-shadow .12s;
+  }
+  #btn-start:active { transform: scale(.93); box-shadow: 0 2px 8px rgba(255,159,67,.4); }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <button class="icon-btn" id="btn-back">
+    <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+  </button>
+  <button class="icon-btn" id="btn-reset">
+    <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+  </button>
+  <div id="level-nav">
+    <button class="level-nav-btn" id="btn-prev-level">
+      <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+    </button>
+    <span id="level-label">Level 1</span>
+    <button class="level-nav-btn" id="btn-next-level">
+      <svg viewBox="0 0 24 24"><path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg>
+    </button>
+  </div>
+  <div id="lives">
+    <span class="heart" id="h1">❤️</span>
+    <span class="heart" id="h2">❤️</span>
+    <span class="heart" id="h3">❤️</span>
+  </div>
+</div>
+
+<div id="stage">
+  <div id="maze-wrap"><canvas id="maze"></canvas></div>
+  <div id="hint">Tap a snake to release it</div>
+</div>
+
+<div class="overlay" id="ov-win">
+  <div class="ov-icon">🎉</div>
+  <div class="ov-title">Cleared!</div>
+  <div class="ov-sub" id="ov-win-sub">All snakes released!</div>
+  <button class="ov-btn btn-win" id="btn-next">Next Level →</button>
+</div>
+<div class="overlay" id="ov-lose">
+  <div class="ov-icon">💥</div>
+  <div class="ov-title">Game Over</div>
+  <div class="ov-sub">No lives left!</div>
+  <button class="ov-btn btn-lose" id="btn-restart">Try Again</button>
+</div>
+
+<!-- Welcome screen -->
+<div id="welcome-screen">
+  <div id="welcome-inner">
+    <h1 id="welcome-title">Sneaky</h1>
+    <canvas id="welcome-canvas" width="300" height="300"></canvas>
+    <button id="btn-start">▶ Play</button>
+  </div>
+</div>
+
+
+<div id="ov-info">
+  <div class="info-card">
+    <span class="info-badge" id="info-badge">New!</span>
+    <canvas id="info-canvas" width="200" height="110"></canvas>
+    <div class="info-name" id="info-name">Stone</div>
+    <div class="info-desc" id="info-desc">Description here.</div>
+    <button class="info-ok" id="info-ok">Got it!</button>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// LEVELS — fully validated.
+// Snake format: { id, color, cells, dirs }
+//   dirs: [dirOfHead, dirOfTail] — if only one arrow, dirs has 1 element.
+//   cells[0] = head end, cells[last] = tail end.
+// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// LEVELS
+// Each level: { cols, rows, snakes, stones?, bouncers?, tunnels? }
+//   stones:   [{r,c}]            — kills snake on contact
+//   bouncers: [{r,c}]            — reverses snake direction
+//   tunnels:  [[{r,c},{r,c}],…]  — teleport pairs
+// Obstacles are never placed on snake starting cells.
+// Levels 1–4:  no obstacles
+// Levels 5–8:  stones
+// Levels 9–12: bouncers
+// Levels 13–16: tunnels
+// ─────────────────────────────────────────────
+const LEVELS = [
+  // ── TIER 1: NO OBSTACLES ─────────────────────
+  // Level 1 — 6×6, 3 snakes
+  { cols:6, rows:6,
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'],     cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R','D'], cells:[{r:2,c:5},{r:2,c:4},{r:2,c:3},{r:3,c:3}]},
+      {id:2,color:'#4ade80',dirs:['R'],     cells:[{r:4,c:5},{r:4,c:4},{r:4,c:3}]},
+    ]},
+  // Level 2 — 7×7, 4 snakes
+  { cols:7, rows:7,
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'],      cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R','U'],  cells:[{r:3,c:4},{r:3,c:3},{r:2,c:3},{r:1,c:3},{r:1,c:4},{r:1,c:5}]},
+      {id:2,color:'#fbbf24',dirs:['L'],      cells:[{r:5,c:2},{r:5,c:3},{r:5,c:4},{r:5,c:5},{r:5,c:6}]},
+      {id:3,color:'#4ade80',dirs:['U','L'],  cells:[{r:2,c:6},{r:3,c:6},{r:4,c:6},{r:4,c:5}]},
+    ]},
+  // Level 3 — 8×8, 5 snakes + diagonal
+  { cols:8, rows:8,
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1},{r:6,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:7},{r:1,c:6},{r:1,c:5},{r:1,c:4},{r:1,c:3}]},
+      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:7,c:7},{r:6,c:7},{r:5,c:7},{r:4,c:7},{r:3,c:7}]},
+      {id:3,color:'#4ade80',dirs:['L','R'],    cells:[{r:7,c:1},{r:7,c:2},{r:7,c:3},{r:7,c:4},{r:7,c:5}]},
+      {id:4,color:'#a78bfa',dirs:['UL','DR_'], cells:[{r:3,c:3},{r:4,c:4},{r:5,c:5},{r:6,c:6}]},
+    ]},
+  // Level 4 — 9×9, 6 snakes + diagonal
+  { cols:9, rows:9,
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1},{r:6,c:1},{r:7,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:8},{r:1,c:7},{r:1,c:6},{r:1,c:5},{r:1,c:4},{r:1,c:3}]},
+      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:8,c:8},{r:7,c:8},{r:6,c:8},{r:5,c:8},{r:4,c:8},{r:3,c:8}]},
+      {id:3,color:'#4ade80',dirs:['L','R'],    cells:[{r:8,c:1},{r:8,c:2},{r:8,c:3},{r:8,c:4},{r:8,c:5},{r:8,c:6}]},
+      {id:4,color:'#a78bfa',dirs:['UL','DR_'], cells:[{r:3,c:3},{r:4,c:4},{r:5,c:5},{r:6,c:6}]},
+      {id:5,color:'#fb923c',dirs:['R','R'],    cells:[{r:5,c:3},{r:5,c:2},{r:4,c:2},{r:3,c:2},{r:2,c:2},{r:2,c:3},{r:2,c:4}]},
+    ]},
+
+  // ── TIER 2: STONES ───────────────────────────
+  // Level 5 — 7×7, 4 snakes, 2 stones
+  { cols:7, rows:7,
+    stones:[{r:2,c:4},{r:4,c:2}],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'],     cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R'],     cells:[{r:3,c:5},{r:3,c:4},{r:3,c:3},{r:3,c:2}]},
+      {id:2,color:'#fbbf24',dirs:['D'],     cells:[{r:3,c:6},{r:2,c:6},{r:1,c:6},{r:1,c:5}]},
+      {id:3,color:'#4ade80',dirs:['L','R'], cells:[{r:5,c:3},{r:5,c:4},{r:5,c:5},{r:5,c:6}]},
+    ]},
+  // Level 6 — 8×8, 5 snakes, 3 stones
+  { cols:8, rows:8,
+    stones:[{r:2,c:4},{r:4,c:2},{r:4,c:6},{r:6,c:4}],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R','U'],    cells:[{r:3,c:6},{r:3,c:5},{r:2,c:5},{r:1,c:5},{r:1,c:6},{r:1,c:7}]},
+      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:4,c:7},{r:3,c:7},{r:2,c:7},{r:2,c:6}]},
+      {id:3,color:'#4ade80',dirs:['L','L'],    cells:[{r:6,c:1},{r:6,c:2},{r:6,c:3},{r:5,c:3},{r:5,c:2}]},
+      {id:4,color:'#a78bfa',dirs:['UL','DR_'], cells:[{r:5,c:5},{r:6,c:6},{r:7,c:7}]},
+    ]},
+  // Level 7 — 8×8, 5 snakes, 4 stones
+  { cols:8, rows:8,
+    stones:[{r:1,c:4},{r:4,c:1},{r:4,c:6},{r:6,c:3}],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:2,c:2},{r:3,c:2},{r:4,c:2},{r:5,c:2}]},
+      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:6},{r:1,c:5},{r:2,c:5},{r:2,c:4},{r:2,c:3}]},
+      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:3,c:7},{r:2,c:7},{r:1,c:7},{r:2,c:6}]},
+      {id:3,color:'#4ade80',dirs:['L'],        cells:[{r:6,c:2},{r:7,c:2},{r:7,c:3},{r:7,c:4},{r:7,c:5},{r:7,c:6},{r:6,c:6}]},
+      {id:4,color:'#a78bfa',dirs:['DL','UR'],  cells:[{r:5,c:4},{r:4,c:5},{r:3,c:5},{r:3,c:4},{r:3,c:3}]},
+    ]},
+  // Level 8 — 9×9, 6 snakes, 5 stones
+  { cols:9, rows:9,
+    stones:[{r:2,c:4},{r:4,c:2},{r:4,c:6},{r:6,c:4},{r:4,c:4}],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:7},{r:1,c:6},{r:1,c:5},{r:1,c:4},{r:1,c:3}]},
+      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:6,c:7},{r:5,c:7},{r:4,c:7},{r:3,c:7},{r:2,c:7}]},
+      {id:3,color:'#4ade80',dirs:['L','R'],    cells:[{r:7,c:1},{r:7,c:2},{r:7,c:3},{r:7,c:4},{r:7,c:5}]},
+      {id:4,color:'#a78bfa',dirs:['DR_','UL'], cells:[{r:3,c:3},{r:3,c:2},{r:2,c:2},{r:2,c:3}]},
+      {id:5,color:'#fb923c',dirs:['D'],        cells:[{r:5,c:5},{r:5,c:6},{r:6,c:6},{r:7,c:6},{r:7,c:7}]},
+    ]},
+
+  // ── TIER 3: BOUNCERS ─────────────────────────
+  // Level 9 — 6x6, 4 snakes, 1 bouncer (MUST use bouncer to solve)
+  // Pink fires D, hits bouncer at (3,3), reverses to U, exits top
+  { cols:6, rows:6,
+    bouncers:[{r:3,c:3}],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['D'],   cells:[{r:2,c:3},{r:2,c:2},{r:2,c:1},{r:3,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R'],   cells:[{r:1,c:5},{r:1,c:4},{r:1,c:3},{r:1,c:2}]},
+      {id:2,color:'#4ade80',dirs:['L'],   cells:[{r:4,c:1},{r:4,c:2},{r:4,c:3},{r:4,c:4}]},
+      {id:3,color:'#fbbf24',dirs:['D'],   cells:[{r:4,c:5},{r:3,c:5},{r:2,c:5},{r:2,c:4}]},
+    ]},
+  // Level 10 — 8×8, 5 snakes, 2 bouncers
+  { cols:8, rows:8,
+    bouncers:[{r:2,c:4},{r:5,c:3}],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:6},{r:1,c:5},{r:1,c:4},{r:1,c:3}]},
+      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:3,c:7},{r:2,c:7},{r:1,c:7},{r:2,c:6}]},
+      {id:3,color:'#4ade80',dirs:['L','R'],    cells:[{r:6,c:1},{r:6,c:2},{r:6,c:3},{r:6,c:4},{r:6,c:5}]},
+      {id:4,color:'#a78bfa',dirs:['UL','DR_'], cells:[{r:4,c:6},{r:5,c:7},{r:6,c:8}]},
+    ]},
+  // Level 11 — 9×9, 5 snakes, 3 bouncers
+  { cols:9, rows:9,
+    bouncers:[{r:2,c:5},{r:5,c:2},{r:6,c:6}],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:7},{r:1,c:6},{r:1,c:5},{r:1,c:4},{r:1,c:3}]},
+      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:5,c:8},{r:4,c:8},{r:3,c:8},{r:2,c:8},{r:1,c:8}]},
+      {id:3,color:'#4ade80',dirs:['L'],        cells:[{r:7,c:3},{r:7,c:4},{r:7,c:5},{r:7,c:6},{r:7,c:7}]},
+      {id:4,color:'#a78bfa',dirs:['U','DL'],  cells:[{r:7,c:1},{r:6,c:2},{r:5,c:3},{r:4,c:3},{r:3,c:3}]},
+    ]},
+  // Level 12 — 9×9, 6 snakes, 3 bouncers + 2 stones
+  { cols:9, rows:9,
+    stones:[{r:3,c:6},{r:6,c:3}],
+    bouncers:[{r:2,c:4},{r:5,c:5},{r:7,c:2}],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:7},{r:1,c:6},{r:1,c:5},{r:1,c:4},{r:1,c:3}]},
+      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:4,c:8},{r:3,c:8},{r:2,c:8},{r:1,c:8}]},
+      {id:3,color:'#4ade80',dirs:['L','R'],    cells:[{r:7,c:3},{r:7,c:4},{r:7,c:5},{r:7,c:6},{r:7,c:7}]},
+      {id:4,color:'#a78bfa',dirs:['UL','DR_'], cells:[{r:4,c:4},{r:5,c:4},{r:6,c:4},{r:6,c:5}]},
+      {id:5,color:'#fb923c',dirs:['R'],        cells:[{r:6,c:2},{r:5,c:2},{r:4,c:2},{r:5,c:3}]},
+    ]},
+
+  // ── TIER 4: TUNNELS ──────────────────────────
+  // Level 13 — 7x7, 4 snakes, 1 tunnel (MUST use tunnel to solve)
+  // Pink fires R, enters tunnel at (1,3), exits at (5,1), continues R, exits right
+  { cols:7, rows:7,
+    tunnels:[[{r:1,c:3},{r:5,c:1}]],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['R'],   cells:[{r:1,c:2},{r:1,c:1},{r:2,c:1},{r:3,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['U'],   cells:[{r:3,c:5},{r:4,c:5},{r:5,c:5},{r:5,c:4}]},
+      {id:2,color:'#fbbf24',dirs:['R'],   cells:[{r:5,c:3},{r:5,c:2},{r:6,c:2},{r:6,c:1}]},
+      {id:3,color:'#4ade80',dirs:['D'],   cells:[{r:3,c:6},{r:2,c:6},{r:1,c:6},{r:1,c:5}]},
+    ]},
+  // Level 14 — 9×9, 5 snakes, 2 tunnel pairs, 1 navigator
+  { cols:9, rows:9,
+    tunnels:[[{r:2,c:4},{r:6,c:4}],[{r:4,c:2},{r:4,c:8}]],
+    navigators:[{r:3,c:5,orient:'D1'}],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:7},{r:1,c:6},{r:1,c:5},{r:1,c:4},{r:1,c:3}]},
+      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:6,c:7},{r:5,c:7},{r:4,c:7},{r:3,c:7}]},
+      {id:3,color:'#4ade80',dirs:['L'],        cells:[{r:7,c:2},{r:7,c:3},{r:7,c:4},{r:7,c:5},{r:7,c:6}]},
+      {id:4,color:'#a78bfa',dirs:['UL','DR_'], cells:[{r:3,c:3},{r:4,c:4},{r:5,c:5},{r:6,c:6}]},
+    ]},
+  // Level 15 — 9×9, 6 snakes, 2 tunnels + 2 stones + 1 navigator
+  { cols:9, rows:9,
+    stones:[{r:3,c:5},{r:6,c:5}],
+    tunnels:[[{r:1,c:5},{r:7,c:3}],[{r:4,c:8},{r:8,c:2}]],
+    navigators:[{r:5,c:6,orient:'H'}],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:7},{r:1,c:6},{r:2,c:6},{r:2,c:5},{r:2,c:4},{r:2,c:3},{r:1,c:3}]},
+      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:6,c:7},{r:5,c:7},{r:4,c:7},{r:3,c:7}]},
+      {id:3,color:'#4ade80',dirs:['L','R'],    cells:[{r:7,c:4},{r:7,c:5},{r:7,c:6},{r:7,c:7}]},
+      {id:4,color:'#a78bfa',dirs:['DR_','UL'], cells:[{r:3,c:4},{r:4,c:4},{r:5,c:4},{r:6,c:4}]},
+      {id:5,color:'#fb923c',dirs:['R'],        cells:[{r:8,c:1},{r:7,c:1},{r:6,c:1},{r:6,c:2}]},
+    ]},
+  // Level 16 — 10×10, 7 snakes, all obstacles
+  { cols:10, rows:10,
+    stones:[{r:3,c:5},{r:6,c:4}],
+    bouncers:[{r:4,c:7},{r:6,c:2}],
+    tunnels:[[{r:1,c:5},{r:8,c:4}],[{r:6,c:9},{r:6,c:1}]],
+    navigators:[{r:4,c:5,orient:'D2'},{r:7,c:5,orient:'V'}],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:8},{r:1,c:7},{r:2,c:7},{r:2,c:6},{r:2,c:5},{r:2,c:4},{r:2,c:3},{r:1,c:3}]},
+      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:5,c:9},{r:4,c:9},{r:3,c:9},{r:2,c:9}]},
+      {id:3,color:'#4ade80',dirs:['L','R'],    cells:[{r:9,c:2},{r:9,c:3},{r:9,c:4},{r:9,c:5},{r:9,c:6}]},
+      {id:4,color:'#a78bfa',dirs:['UL','DR_'], cells:[{r:3,c:3},{r:4,c:4},{r:5,c:5},{r:6,c:6},{r:7,c:7}]},
+      {id:5,color:'#fb923c',dirs:['UR','DL'],  cells:[{r:8,c:3},{r:7,c:3},{r:6,c:3},{r:5,c:3},{r:4,c:3}]},
+      {id:6,color:'#34d399',dirs:['L','R'],    cells:[{r:8,c:6},{r:8,c:7},{r:8,c:8},{r:7,c:8},{r:7,c:9}]},
+    ]},
+
+  // ── TIER 5: NAVIGATORS ───────────────────────
+  // Level 17 — 6x6, 4 snakes, 1 navigator (MUST use navigator to solve)
+  // Pink fires R, hits D2 navigator at (3,2), deflects to U, exits top
+  { cols:6, rows:6,
+    navigators:[{r:3,c:2,orient:'D2'}],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['R'],   cells:[{r:3,c:1},{r:4,c:1},{r:5,c:1},{r:5,c:2}]},
+      {id:1,color:'#60a5fa',dirs:['R'],   cells:[{r:1,c:4},{r:1,c:3},{r:1,c:2},{r:1,c:1}]},
+      {id:2,color:'#fbbf24',dirs:['D'],   cells:[{r:4,c:4},{r:3,c:4},{r:2,c:4},{r:2,c:5}]},
+      {id:3,color:'#4ade80',dirs:['L'],   cells:[{r:5,c:3},{r:5,c:4},{r:5,c:5},{r:4,c:5}]},
+    ]},
+  // Level 18 — 8×8, 5 snakes, 3 navigators
+  { cols:8, rows:8,
+    navigators:[{r:2,c:4,orient:'V'},{r:5,c:3,orient:'D2'},{r:4,c:6,orient:'H'}],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1},{r:6,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R'],        cells:[{r:1,c:5},{r:1,c:4},{r:1,c:3},{r:1,c:2}]},
+      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:2,c:7},{r:1,c:7},{r:1,c:6},{r:2,c:6}]},
+      {id:3,color:'#4ade80',dirs:['L','R'],    cells:[{r:6,c:3},{r:6,c:4},{r:6,c:5},{r:6,c:6}]},
+      {id:4,color:'#a78bfa',dirs:['UL','DR_'], cells:[{r:3,c:3},{r:4,c:4},{r:5,c:4}]},
+    ]},
+  // Level 19 — 9×9, 5 snakes, 3 navigators + 1 stone
+  { cols:9, rows:9,
+    stones:[{r:5,c:5}],
+    navigators:[{r:2,c:3,orient:'D2'},{r:4,c:6,orient:'D1'},{r:6,c:2,orient:'H'}],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:7},{r:1,c:6},{r:1,c:5},{r:1,c:4}]},
+      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:5,c:8},{r:4,c:8},{r:3,c:8},{r:2,c:8}]},
+      {id:3,color:'#4ade80',dirs:['L'],        cells:[{r:7,c:4},{r:7,c:5},{r:7,c:6},{r:7,c:7}]},
+      {id:4,color:'#a78bfa',dirs:['DL','UR'],  cells:[{r:3,c:3},{r:4,c:3},{r:5,c:2},{r:6,c:1}]},
+    ]},
+  // Level 20 — 10×10, 7 snakes, 4 navigators + 1 bouncer + 1 tunnel
+  { cols:10, rows:10,
+    bouncers:[{r:5,c:5}],
+    tunnels:[[{r:1,c:5},{r:8,c:4}]],
+    navigators:[{r:3,c:3,orient:'D1'},{r:3,c:7,orient:'D2'},{r:7,c:3,orient:'D2'},{r:7,c:7,orient:'D1'}],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1},{r:6,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:8},{r:1,c:7},{r:2,c:7},{r:2,c:6},{r:2,c:5},{r:2,c:4},{r:2,c:3},{r:1,c:3}]},
+      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:4,c:9},{r:3,c:9},{r:2,c:9},{r:1,c:9}]},
+      {id:3,color:'#4ade80',dirs:['L','R'],    cells:[{r:9,c:3},{r:9,c:4},{r:9,c:5},{r:9,c:6},{r:9,c:7}]},
+      {id:4,color:'#a78bfa',dirs:['UL','DR_'], cells:[{r:4,c:4},{r:5,c:4},{r:6,c:4},{r:6,c:5}]},
+      {id:5,color:'#fb923c',dirs:['R'],        cells:[{r:7,c:2},{r:7,c:1},{r:8,c:1},{r:8,c:2}]},
+      {id:6,color:'#34d399',dirs:['U'],        cells:[{r:8,c:9},{r:8,c:8},{r:8,c:7},{r:8,c:6},{r:8,c:5}]},
+    ]},
+
+  // ── TIER 6: BUNNIES ──────────────────────────
+  // Level 21 — 6x6, 3 snakes, 2 bunnies (intro — all bunnies must be eaten to win)
+  { cols:6, rows:6,
+    bunnies:[{r:3,c:3},{r:2,c:3}],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['R'], cells:[{r:3,c:1},{r:4,c:1},{r:5,c:1},{r:5,c:2}]},
+      {id:1,color:'#60a5fa',dirs:['D'], cells:[{r:1,c:3},{r:1,c:2},{r:1,c:1},{r:2,c:1}]},
+      {id:2,color:'#4ade80',dirs:['L'], cells:[{r:4,c:4},{r:4,c:5},{r:3,c:5},{r:2,c:5}]},
+    ]},
+  // Level 22 — 7x7, 4 snakes, 3 bunnies
+  { cols:7, rows:7,
+    bunnies:[{r:2,c:2},{r:4,c:4},{r:3,c:5}],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'], cells:[{r:3,c:2},{r:4,c:2},{r:5,c:2},{r:5,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R'], cells:[{r:4,c:3},{r:3,c:3},{r:2,c:3},{r:2,c:4}]},
+      {id:2,color:'#fbbf24',dirs:['D'], cells:[{r:2,c:5},{r:1,c:5},{r:1,c:4},{r:1,c:3}]},
+      {id:3,color:'#4ade80',dirs:['L'], cells:[{r:6,c:3},{r:6,c:4},{r:5,c:4},{r:5,c:5}]},
+    ]},
+
+  // ── TIER 7: PATROLLING OBSTACLES ─────────────
+  // Level 23 — 7x7, 3 snakes, 1 patrol stone (intro — time your snake!)
+  { cols:7, rows:7,
+    stones:[{r:3,c:1,patrol:[{r:3,c:1},{r:3,c:5}],speed:'slow'}],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['D'], cells:[{r:1,c:3},{r:1,c:2},{r:2,c:2},{r:2,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R'], cells:[{r:5,c:5},{r:5,c:4},{r:5,c:3},{r:5,c:2}]},
+      {id:2,color:'#4ade80',dirs:['U'], cells:[{r:4,c:6},{r:5,c:6},{r:6,c:6},{r:6,c:5}]},
+    ]},
+  // Level 24 — 8x8, 4 snakes, 2 patrol stones
+  { cols:8, rows:8,
+    stones:[
+      {r:2,c:3,patrol:[{r:2,c:3},{r:2,c:6}],speed:'medium'},
+      {r:5,c:4,patrol:[{r:5,c:4},{r:5,c:7}],speed:'fast'},
+    ],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'], cells:[{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R'], cells:[{r:1,c:6},{r:1,c:5},{r:1,c:4},{r:1,c:3}]},
+      {id:2,color:'#fbbf24',dirs:['D'], cells:[{r:4,c:7},{r:3,c:7},{r:2,c:7},{r:1,c:7}]},
+      {id:3,color:'#4ade80',dirs:['L'], cells:[{r:6,c:3},{r:6,c:4},{r:6,c:5},{r:6,c:6}]},
+    ]},
+  // Level 25 — 7x7, 3 snakes, 1 patrol bunny + 1 static bunny (patrol bunny intro)
+  { cols:7, rows:7,
+    bunnies:[
+      {r:2,c:3,patrol:[{r:2,c:3},{r:5,c:3}],speed:'medium'},
+      {r:4,c:5},
+    ],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'], cells:[{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R'], cells:[{r:6,c:5},{r:6,c:4},{r:6,c:3},{r:6,c:2}]},
+      {id:2,color:'#4ade80',dirs:['U'], cells:[{r:3,c:6},{r:4,c:6},{r:5,c:6},{r:6,c:6}]},
+    ]},
+  // Level 26 — 8x8, 4 snakes, 1 patrol stone + 2 patrol bunnies
+  { cols:8, rows:8,
+    stones:[{r:3,c:4,patrol:[{r:3,c:4},{r:6,c:4}],speed:'fast'}],
+    bunnies:[
+      {r:2,c:2,patrol:[{r:2,c:2},{r:2,c:6}],speed:'slow'},
+      {r:6,c:6,patrol:[{r:6,c:6},{r:6,c:2}],speed:'fast'},
+    ],
+    snakes:[
+      {id:0,color:'#f472b6',dirs:['U'], cells:[{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1}]},
+      {id:1,color:'#60a5fa',dirs:['R'], cells:[{r:1,c:5},{r:1,c:4},{r:1,c:3},{r:1,c:2}]},
+      {id:2,color:'#fbbf24',dirs:['D'], cells:[{r:4,c:7},{r:3,c:7},{r:2,c:7},{r:1,c:7}]},
+      {id:3,color:'#4ade80',dirs:['L'], cells:[{r:7,c:3},{r:7,c:4},{r:7,c:5},{r:7,c:6}]},
+    ]},
+];
+
+const CELL = 48, PAD = 16;
+const canvas = document.getElementById('maze');
+const ctx = canvas.getContext('2d');
+const DR = {U:-1,D:1,L:0,R:0, UL:-1,UR:-1,DL:1,DR_:1};
+const DC = {U:0,D:0,L:-1,R:1, UL:-1,UR:1,DL:-1,DR_:1};
+const DIR_ANGLE = {
+  U:-Math.PI/2, R:0, D:Math.PI/2, L:Math.PI,
+  UR:-Math.PI/4, DR_:Math.PI/4, DL:3*Math.PI/4, UL:-3*Math.PI/4
+};
+
+// ─────────────────────────────────────────────
+// MUSIC SYSTEM — soft hand-crafted melody
+// ─────────────────────────────────────────────
+const Music = (() => {
+  let ac = null, masterGain = null, reverbNode = null;
+  let seqTimer = null;
+  let seqStep = 0, seqNextTime = 0;
+  let v = null;
+  let playing = false;
+  let pendingLevel = null;
+
+  // ── The melody: 16 eighth-note steps, semitones above root ──
+  // A gentle, memorable tune in pentatonic — two 8-note phrases
+  // Phrase A: rises and falls softly
+  // Phrase B: answers with a little skip and resolution
+  const MELODY = [
+  //  step:  0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15
+    { s:  0, d: 0.7 },  // root
+    { s:  4, d: 0.5 },  // major third
+    { s:  7, d: 0.7 },  // fifth
+    { s:  9, d: 1.0 },  // sixth (hold)
+    { s:  7, d: 0.5 },  // fifth (echo)
+    { s:  4, d: 0.5 },  // third
+    { s:  2, d: 0.7 },  // second
+    { s:  0, d: 1.0 },  // root (hold — end phrase A)
+    { s:  5, d: 0.5 },  // fourth
+    { s:  7, d: 0.5 },  // fifth
+    { s:  9, d: 0.7 },  // sixth
+    { s: 12, d: 1.0 },  // octave (sparkle — hold)
+    { s:  9, d: 0.5 },  // sixth
+    { s:  7, d: 0.5 },  // fifth
+    { s:  4, d: 0.7 },  // third
+    { s:  0, d: 1.5 },  // root (long hold — end phrase B)
+  ];
+
+  // ── Bass patterns (8 quarter-note steps) ──
+  const BASS_PATTERNS = {
+    walk:    [0, 7, 5, 7,  0, 7, 2, 0],
+    root:    [0, 0, 7, 0,  0, 0, 7, 0],
+    bounce:  [0, 7, 0, 4,  0, 7, 4, 2],
+    skip:    [0, 5, 7, 5,  0, 4, 7, 2],
+    drone:   [0, 0, 0, 0,  0, 0, 0, 0],
+    waltz:   [0, 7, 4, 0,  5, 7, 2, 0],
+    staccato:[0, 0, 5, 0,  7, 0, 4, 0],
+  };
+
+  function noteFreq(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+
+  // ── 26 per-level variation objects ──
+  // Fields:
+  //   root       MIDI root note
+  //   bpm        tempo
+  //   oct        melody octave offset (0=middle, 1=high, -1=low)
+  //   melShift   extra semitones added to melody (0 or 12)
+  //   melVol     melody volume
+  //   bassVol    bass volume
+  //   wave       melody oscillator type
+  //   bassWave   bass oscillator type
+  //   filterHz   lowpass cutoff
+  //   bassKey    key into BASS_PATTERNS
+  //   echo       bool: add a soft delayed echo layer
+  //   arp        bool: arpeggiate long notes
+  //   staccato   bool: short detached notes
+  //   padVol     volume of harmony pad (0 = off)
+  //   reverbMix  reverb wetness (0.1–0.5)
+  //   detune     oscillator detune cents (warmth / chorus)
+  const VARIATIONS = [
+// ── TIER 1: Intro — simple, bright, innocent ─────────────────────────────
+/*L1*/ { root:60, bpm:76,  oct:1,  melShift:0,  melVol:0.13, bassVol:0.09, wave:'sine',     bassWave:'sine',     filterHz:900,  bassKey:'walk',    echo:false, arp:false, staccato:false, padVol:0.06, reverbMix:0.22, detune:3  },
+/*L2*/ { root:67, bpm:80,  oct:1,  melShift:0,  melVol:0.13, bassVol:0.09, wave:'sine',     bassWave:'sine',     filterHz:1000, bassKey:'root',    echo:false, arp:false, staccato:false, padVol:0.06, reverbMix:0.20, detune:3  },
+/*L3*/ { root:65, bpm:78,  oct:1,  melShift:0,  melVol:0.13, bassVol:0.10, wave:'sine',     bassWave:'triangle', filterHz:950,  bassKey:'bounce',  echo:false, arp:false, staccato:false, padVol:0.07, reverbMix:0.24, detune:4  },
+/*L4*/ { root:62, bpm:82,  oct:1,  melShift:0,  melVol:0.14, bassVol:0.10, wave:'sine',     bassWave:'sine',     filterHz:1050, bassKey:'skip',    echo:true,  arp:false, staccato:false, padVol:0.05, reverbMix:0.22, detune:3  },
+// ── TIER 2: Stones appear — slightly darker, staccato starts ─────────────
+/*L5*/ { root:69, bpm:80,  oct:1,  melShift:0,  melVol:0.12, bassVol:0.10, wave:'sine',     bassWave:'sine',     filterHz:850,  bassKey:'drone',   echo:false, arp:false, staccato:true,  padVol:0.06, reverbMix:0.28, detune:5  },
+/*L6*/ { root:64, bpm:84,  oct:1,  melShift:0,  melVol:0.13, bassVol:0.10, wave:'triangle', bassWave:'sine',     filterHz:900,  bassKey:'walk',    echo:false, arp:false, staccato:true,  padVol:0.07, reverbMix:0.25, detune:4  },
+/*L7*/ { root:60, bpm:82,  oct:1,  melShift:0,  melVol:0.13, bassVol:0.09, wave:'sine',     bassWave:'triangle', filterHz:870,  bassKey:'bounce',  echo:true,  arp:false, staccato:false, padVol:0.06, reverbMix:0.26, detune:6  },
+/*L8*/ { root:67, bpm:86,  oct:1,  melShift:0,  melVol:0.13, bassVol:0.11, wave:'sine',     bassWave:'sine',     filterHz:1000, bassKey:'waltz',   echo:false, arp:false, staccato:true,  padVol:0.05, reverbMix:0.22, detune:3  },
+// ── TIER 3: Bouncers — springy feel, arpeggios ───────────────────────────
+/*L9*/ { root:65, bpm:88,  oct:1,  melShift:0,  melVol:0.13, bassVol:0.10, wave:'sine',     bassWave:'sine',     filterHz:1100, bassKey:'skip',    echo:false, arp:true,  staccato:false, padVol:0.06, reverbMix:0.20, detune:4  },
+/*L10*/{ root:62, bpm:90,  oct:1,  melShift:0,  melVol:0.13, bassVol:0.10, wave:'sine',     bassWave:'triangle', filterHz:1050, bassKey:'bounce',  echo:false, arp:true,  staccato:false, padVol:0.07, reverbMix:0.20, detune:5  },
+/*L11*/{ root:69, bpm:86,  oct:1,  melShift:0,  melVol:0.12, bassVol:0.10, wave:'triangle', bassWave:'sine',     filterHz:950,  bassKey:'walk',    echo:true,  arp:true,  staccato:false, padVol:0.06, reverbMix:0.22, detune:4  },
+/*L12*/{ root:64, bpm:92,  oct:1,  melShift:0,  melVol:0.13, bassVol:0.11, wave:'sine',     bassWave:'sine',     filterHz:1100, bassKey:'staccato',echo:false, arp:true,  staccato:true,  padVol:0.05, reverbMix:0.18, detune:3  },
+// ── TIER 4: Tunnels — mysterious, echo, lower register ───────────────────
+/*L13*/{ root:58, bpm:78,  oct:0,  melShift:0,  melVol:0.12, bassVol:0.09, wave:'sine',     bassWave:'sine',     filterHz:750,  bassKey:'drone',   echo:true,  arp:false, staccato:false, padVol:0.09, reverbMix:0.42, detune:6  },
+/*L14*/{ root:61, bpm:76,  oct:0,  melShift:0,  melVol:0.12, bassVol:0.09, wave:'triangle', bassWave:'triangle', filterHz:720,  bassKey:'walk',    echo:true,  arp:false, staccato:false, padVol:0.09, reverbMix:0.45, detune:7  },
+/*L15*/{ root:63, bpm:80,  oct:0,  melShift:0,  melVol:0.12, bassVol:0.10, wave:'sine',     bassWave:'triangle', filterHz:780,  bassKey:'bounce',  echo:true,  arp:false, staccato:false, padVol:0.08, reverbMix:0.40, detune:5  },
+/*L16*/{ root:56, bpm:74,  oct:0,  melShift:0,  melVol:0.11, bassVol:0.09, wave:'triangle', bassWave:'sine',     filterHz:700,  bassKey:'root',    echo:true,  arp:false, staccato:false, padVol:0.10, reverbMix:0.48, detune:8  },
+// ── TIER 5: Navigators — crystalline, high shimmer ───────────────────────
+/*L17*/{ root:64, bpm:88,  oct:1,  melShift:12, melVol:0.11, bassVol:0.08, wave:'sine',     bassWave:'sine',     filterHz:1400, bassKey:'skip',    echo:false, arp:false, staccato:false, padVol:0.06, reverbMix:0.28, detune:2  },
+/*L18*/{ root:67, bpm:90,  oct:1,  melShift:12, melVol:0.11, bassVol:0.08, wave:'sine',     bassWave:'triangle', filterHz:1500, bassKey:'walk',    echo:false, arp:false, staccato:true,  padVol:0.05, reverbMix:0.26, detune:2  },
+/*L19*/{ root:60, bpm:86,  oct:1,  melShift:12, melVol:0.12, bassVol:0.09, wave:'sine',     bassWave:'sine',     filterHz:1350, bassKey:'bounce',  echo:true,  arp:false, staccato:false, padVol:0.06, reverbMix:0.30, detune:3  },
+/*L20*/{ root:62, bpm:94,  oct:1,  melShift:12, melVol:0.12, bassVol:0.09, wave:'sine',     bassWave:'sine',     filterHz:1600, bassKey:'waltz',   echo:false, arp:true,  staccato:false, padVol:0.05, reverbMix:0.24, detune:2  },
+// ── TIER 6: Bunnies — playful, warm, soft ────────────────────────────────
+/*L21*/{ root:65, bpm:82,  oct:1,  melShift:0,  melVol:0.13, bassVol:0.10, wave:'sine',     bassWave:'triangle', filterHz:950,  bassKey:'waltz',   echo:false, arp:false, staccato:false, padVol:0.08, reverbMix:0.24, detune:5  },
+/*L22*/{ root:60, bpm:80,  oct:1,  melShift:0,  melVol:0.13, bassVol:0.10, wave:'triangle', bassWave:'sine',     filterHz:900,  bassKey:'skip',    echo:true,  arp:false, staccato:false, padVol:0.08, reverbMix:0.26, detune:6  },
+// ── TIER 7: Patrol — urgent, staccato, driving ───────────────────────────
+/*L23*/{ root:62, bpm:96,  oct:1,  melShift:0,  melVol:0.13, bassVol:0.11, wave:'sine',     bassWave:'triangle', filterHz:1050, bassKey:'staccato',echo:false, arp:false, staccato:true,  padVol:0.04, reverbMix:0.16, detune:3  },
+/*L24*/{ root:64, bpm:98,  oct:1,  melShift:0,  melVol:0.13, bassVol:0.11, wave:'sine',     bassWave:'sine',     filterHz:1100, bassKey:'bounce',  echo:false, arp:true,  staccato:true,  padVol:0.04, reverbMix:0.14, detune:4  },
+/*L25*/{ root:67, bpm:94,  oct:1,  melShift:0,  melVol:0.13, bassVol:0.11, wave:'triangle', bassWave:'triangle', filterHz:1000, bassKey:'walk',    echo:true,  arp:true,  staccato:false, padVol:0.05, reverbMix:0.18, detune:5  },
+/*L26*/{ root:60, bpm:100, oct:2,  melShift:0,  melVol:0.14, bassVol:0.12, wave:'sine',     bassWave:'sine',     filterHz:1300, bassKey:'skip',    echo:true,  arp:true,  staccato:true,  padVol:0.06, reverbMix:0.20, detune:3  },
+  ];
+
+  function getVariation(lvl) {
+    return VARIATIONS[Math.min(lvl, VARIATIONS.length - 1)];
+  }
+
+  // ── Shared reverb (convolver impulse) ──
+  function makeReverb(ctx) {
+    const len = ctx.sampleRate * 1.6;
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const d = buf.getChannelData(c);
+      for (let i = 0; i < len; i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/len, 2.6);
+    }
+    const conv = ctx.createConvolver(); conv.buffer = buf; return conv;
+  }
+
+  function init() {
+    if (ac) return;
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = ac.createGain();
+    masterGain.gain.setValueAtTime(0, ac.currentTime);
+    masterGain.gain.linearRampToValueAtTime(0.38, ac.currentTime + 2.0);
+    reverbNode = makeReverb(ac);
+    const reverbGain = ac.createGain(); reverbGain.gain.value = 0.22;
+    masterGain.connect(reverbGain); reverbGain.connect(reverbNode); reverbNode.connect(ac.destination);
+    masterGain.connect(ac.destination);
+  }
+
+  function playNote(freq, wave, vol, attack, hold, release, when, filter, detune) {
+    if (!ac) return;
+    const osc = ac.createOscillator();
+    const g   = ac.createGain();
+    const lp  = ac.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = filter; lp.Q.value = 0.6;
+    osc.type = wave;
+    osc.frequency.value = freq;
+    osc.detune.value = (Math.random()-0.5) * (detune||4);
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(vol, when + attack);
+    g.gain.setValueAtTime(vol, when + attack + hold);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + attack + hold + release);
+    osc.connect(lp); lp.connect(g); g.connect(masterGain);
+    osc.start(when); osc.stop(when + attack + hold + release + 0.06);
+  }
+
+  function scheduleStep(step, when) {
+    if (!v) return;
+    const beat   = 60 / v.bpm;
+    const eighth = beat / 2;
+    const m      = MELODY[step];
+    const rootM  = v.root + v.oct * 12 + v.melShift;
+    const bass   = BASS_PATTERNS[v.bassKey];
+
+    // ── Melody ──
+    const mFreq  = noteFreq(rootM + m.s);
+    const durMul = v.staccato ? 0.32 : m.d;
+    const mDur   = durMul * eighth;
+    const mHold  = mDur * 0.52;
+    const mRel   = mDur * 0.60;
+    playNote(mFreq, v.wave, v.melVol, 0.012, mHold, mRel, when, v.filterHz, v.detune);
+
+    // Octave shimmer on held notes
+    if (m.d >= 1.0 && !v.staccato) {
+      playNote(mFreq * 2, 'sine', v.melVol * 0.16, 0.028, mHold * 0.55, mRel, when, v.filterHz * 1.4, v.detune);
+    }
+
+    // Echo layer (soft delayed repeat)
+    if (v.echo && m.d >= 0.7) {
+      playNote(mFreq, v.wave, v.melVol * 0.28, 0.01, mHold * 0.4, mRel * 1.2, when + eighth * 0.85, v.filterHz * 0.8, v.detune * 2);
+    }
+
+    // Arpeggio: on long notes, add a quick upper neighbor
+    if (v.arp && m.d >= 1.0) {
+      playNote(noteFreq(rootM + m.s + 4), 'sine', v.melVol * 0.45, 0.008, eighth * 0.2, eighth * 0.3, when + eighth * 0.45, v.filterHz * 1.2, 2);
+      playNote(noteFreq(rootM + m.s + 7), 'sine', v.melVol * 0.35, 0.008, eighth * 0.2, eighth * 0.3, when + eighth * 0.75, v.filterHz * 1.2, 2);
+    }
+
+    // ── Bass (quarter note grid) ──
+    if (step % 2 === 0) {
+      const bi = Math.floor(step / 2) % bass.length;
+      const bFreq = noteFreq(v.root + v.oct * 12 - 12 + bass[bi]);
+      const bHold = v.staccato ? beat * 0.25 : beat * 0.55;
+      playNote(bFreq, v.bassWave, v.bassVol, 0.018, bHold, beat * 0.5, when, v.filterHz * 0.65, v.detune);
+    }
+
+    // ── Harmony pad (phrase start) ──
+    if (v.padVol > 0 && step % 8 === 0) {
+      [[0, 0], [7, 0.05], [4, 0.10]].forEach(([s2, delay]) => {
+        const pFreq = noteFreq(v.root + v.oct * 12 - 12 + s2);
+        playNote(pFreq, 'sine', v.padVol, 0.08, beat * 3.2, beat * 1.8, when + delay, v.filterHz * 0.55, 8);
+      });
+    }
+  }
+
+  function tick() {
+    if (!ac || !playing || !v) return;
+    const eighth = (60 / v.bpm) / 2;
+    const lookahead = 0.15;
+    const now = ac.currentTime;
+    while (seqNextTime < now + lookahead) {
+      scheduleStep(seqStep, seqNextTime);
+      seqNextTime += eighth;
+      seqStep = (seqStep + 1) % MELODY.length;
+    }
+    seqTimer = setTimeout(tick, 50);
+  }
+
+  function start(lvlIdx) {
+    pendingLevel = lvlIdx;
+    if (!ac) return; // No AudioContext yet — unlock() will start it on Play click
+    _doStart(lvlIdx);
+  }
+
+  function _doStart(lvlIdx) {
+    init();
+    if (ac.state === 'suspended') { ac.resume().then(()=>_doStart(lvlIdx)); return; }
+    if (seqTimer) { clearTimeout(seqTimer); seqTimer = null; }
+    playing = true;
+    v = getVariation(lvlIdx);
+    seqStep = 0;
+    if (masterGain) {
+      const now = ac.currentTime;
+      masterGain.gain.cancelScheduledValues(now);
+      masterGain.gain.setValueAtTime(masterGain.gain.value, now);
+      masterGain.gain.linearRampToValueAtTime(0.38, now + 0.6);
+    }
+    seqNextTime = ac.currentTime + 0.65;
+    tick();
+  }
+
+  // Call this once after the first user gesture to actually create AudioContext
+  function unlock() {
+    init();
+    if (ac.state === 'suspended') ac.resume();
+    if (pendingLevel !== null) _doStart(pendingLevel);
+  }
+
+  function playSfx(type) {
+    if (!ac) return;
+    const now = ac.currentTime;
+    const f = v ? v.filterHz : 1000;
+    const root = v ? v.root : 60;
+
+    if (type === 'win') {
+      // Rising joyful arpeggio
+      [0,4,7,12,16].forEach((s,i) =>
+        playNote(noteFreq(72+s),'sine',0.13,0.01,0.18,0.35,now+i*0.09,f*1.4,2));
+
+    } else if (type === 'lose') {
+      // Sad descending minor
+      [0,-3,-5,-8].forEach((s,i) =>
+        playNote(noteFreq(64+s),'triangle',0.10,0.01,0.2,0.4,now+i*0.13,f*0.6,4));
+
+    } else if (type === 'stone') {
+      // Heavy thud — low thump + sharp crack
+      playNote(noteFreq(36),'triangle',0.18,0.003,0.04,0.28,now,300,2);   // deep thud
+      playNote(noteFreq(52),'sawtooth',0.08,0.002,0.01,0.10,now,600,8);   // crack
+
+    } else if (type === 'bounce') {
+      // Springy boing — rising pitch sweep via two staggered notes
+      playNote(noteFreq(60),'triangle',0.13,0.004,0.03,0.18,now,    f*0.9,3);
+      playNote(noteFreq(72),'triangle',0.10,0.004,0.03,0.14,now+0.06,f*1.1,3);
+      playNote(noteFreq(79),'sine',    0.07,0.004,0.02,0.12,now+0.11,f*1.3,2);
+
+    } else if (type === 'tunnel_enter') {
+      // Whoosh down — falling sweep
+      const osc = ac.createOscillator(), g = ac.createGain(), lp = ac.createBiquadFilter();
+      lp.type='lowpass'; lp.frequency.value=1200;
+      osc.type='sine';
+      osc.frequency.setValueAtTime(noteFreq(80), now);
+      osc.frequency.exponentialRampToValueAtTime(noteFreq(48), now+0.35);
+      g.gain.setValueAtTime(0,now); g.gain.linearRampToValueAtTime(0.14,now+0.04);
+      g.gain.exponentialRampToValueAtTime(0.0001,now+0.38);
+      osc.connect(lp); lp.connect(g); g.connect(masterGain);
+      osc.start(now); osc.stop(now+0.42);
+
+    } else if (type === 'tunnel_exit') {
+      // Pop up — rising sweep + bright ping
+      const osc = ac.createOscillator(), g = ac.createGain(), lp = ac.createBiquadFilter();
+      lp.type='lowpass'; lp.frequency.value=1600;
+      osc.type='sine';
+      osc.frequency.setValueAtTime(noteFreq(52), now);
+      osc.frequency.exponentialRampToValueAtTime(noteFreq(80), now+0.22);
+      g.gain.setValueAtTime(0,now); g.gain.linearRampToValueAtTime(0.12,now+0.03);
+      g.gain.exponentialRampToValueAtTime(0.0001,now+0.28);
+      osc.connect(lp); lp.connect(g); g.connect(masterGain);
+      osc.start(now); osc.stop(now+0.32);
+      playNote(noteFreq(84),'sine',0.09,0.005,0.04,0.16,now+0.18,f*1.5,2);
+
+    } else if (type === 'navigate') {
+      // Crisp deflect ping — two quick high notes
+      playNote(noteFreq(96),'sine',0.11,0.004,0.03,0.20,now,     f*2.0,2);
+      playNote(noteFreq(91),'sine',0.08,0.004,0.03,0.16,now+0.07,f*1.8,2);
+
+    } else if (type === 'eat') {
+      // Cute nom — two rising soft pings with shimmer
+      playNote(noteFreq(88),'sine',0.10,0.005,0.05,0.16,now,     f*2.2,2);
+      playNote(noteFreq(95),'sine',0.08,0.005,0.04,0.14,now+0.07,f*2.4,2);
+      playNote(noteFreq(100),'sine',0.05,0.005,0.03,0.12,now+0.13,f*2.6,2);
+
+    } else if (type === 'exit') {
+      // Cheerful little exit chime
+      playNote(noteFreq(79),'sine',0.10,0.005,0.06,0.22,now,     f*1.0,2);
+      playNote(noteFreq(84),'sine',0.08,0.005,0.06,0.20,now+0.07,f*1.2,2);
+      playNote(noteFreq(88),'sine',0.06,0.005,0.05,0.18,now+0.13,f*1.4,2);
+    }
+  }
+
+  function stop() {
+    playing = false;
+    if (seqTimer) { clearTimeout(seqTimer); seqTimer = null; }
+    if (masterGain && ac) {
+      const now = ac.currentTime;
+      masterGain.gain.cancelScheduledValues(now);
+      masterGain.gain.setValueAtTime(masterGain.gain.value, now);
+      masterGain.gain.linearRampToValueAtTime(0, now + 0.8);
+    }
+  }
+
+  return { start, stop, unlock, playSfx };
+})();
+
+
+let levelIdx=0, lives=3, snakes=[], COLS, ROWS, animating=false, hovered=null;
+let STONES=[], BOUNCERS=[], TUNNELS=[], NAVIGATORS=[], BUNNIES=[];
+// Obstacle hit animations: key = "type:r:c", value = {t: 0..1, type}
+const obsAnims = {};
+function triggerObsAnim(key, type, dur=0.45){
+  obsAnims[key] = {t:0, type, dur};
+}
+function updateObsAnims(dt){
+  for(const k of Object.keys(obsAnims)){
+    obsAnims[k].t = Math.min(1, obsAnims[k].t + dt/obsAnims[k].dur);
+    if(obsAnims[k].t>=1) delete obsAnims[k];
+  }
+}
+function getObsAnim(key){ return obsAnims[key]||null; }
+
+// ─── LOAD ───
+function loadLevel(idx) {
+  const lv = LEVELS[idx];
+  COLS=lv.cols; ROWS=lv.rows;
+  canvas.width  = COLS*CELL + PAD*2;
+  canvas.height = ROWS*CELL + PAD*2;
+  snakes = lv.snakes.map(s=>({...s, dirs:[...s.dirs], cells:s.cells.map(c=>({...c})), alive:true, tunnelHidden:0, frozen:null}));
+  STONES     = (lv.stones     || []).map(c=>({...c, pr:c.r, pc:c.c}));
+  BOUNCERS   = (lv.bouncers   || []).map(c=>({...c}));
+  TUNNELS    = (lv.tunnels    || []).map(pair=>pair.map(c=>({...c})));
+  NAVIGATORS = (lv.navigators || []).map(c=>({...c}));
+  BUNNIES    = (lv.bunnies    || []).map(c=>({...c, eaten:false, pr:c.r, pc:c.c}));
+  // Init patrol animation state
+  for(const s of STONES)  if(s.patrol){ s.pt=0; s.pdir=1; }
+  for(const b of BUNNIES) if(b.patrol){ b.pt=0; b.pdir=1; }
+  animating=false; hovered=null;
+  Music.start(idx);
+  buildDecor();
+  document.getElementById('level-label').textContent=`Level ${idx+1}`;
+  document.getElementById('hint').textContent = 'Tap a snake to release it';
+  updateHearts(); updateLevelNav(); fitCanvas(); render();
+
+  // Show info for any new obstacles on this level
+  const newTypes = [];
+  if(STONES.length     && !seenObstacles.has('stone'))     newTypes.push('stone');
+  if(BOUNCERS.length   && !seenObstacles.has('bouncer'))   newTypes.push('bouncer');
+  if(TUNNELS.length    && !seenObstacles.has('tunnel'))    newTypes.push('tunnel');
+  if(NAVIGATORS.length && !seenObstacles.has('navigator')) newTypes.push('navigator');
+  if(BUNNIES.length    && !seenObstacles.has('bunny'))     newTypes.push('bunny');
+  if(STONES.some(s=>s.patrol)  && !seenObstacles.has('patrol_stone')) newTypes.push('patrol_stone');
+  if(BUNNIES.some(b=>b.patrol) && !seenObstacles.has('patrol_bunny')) newTypes.push('patrol_bunny');
+  if(newTypes.length) enqueueObstacleInfo(newTypes, null);
+}
+
+// ─── GRASS BOARD DECORATION ───
+let grassDecor = []; // blob patches + sparse flowers
+
+function buildDecor() {
+  grassDecor = [];
+  const rng = mulberry32(COLS * 1000 + ROWS);
+
+  // Flowers
+  for(let r = 0; r < ROWS; r++) {
+    for(let c = 0; c < COLS; c++) {
+      if(rng() < 0.08) {
+        const fx = PAD + c*CELL + CELL/2 + (rng()-.5)*CELL*.5;
+        const fy = PAD + r*CELL + CELL/2 + (rng()-.5)*CELL*.5;
+        grassDecor.push({ type:'flower', fx, fy, flowerType: Math.floor(rng()*3) });
+      } else { rng(); rng(); }
+    }
+  }
+
+  // Interior grass tufts — scattered across the field
+  const tuftsPerCell = 1.2;
+  const totalTufts = Math.round(COLS * ROWS * tuftsPerCell);
+  const boardW = COLS * CELL, boardH = ROWS * CELL;
+  for(let i = 0; i < totalTufts; i++) {
+    const px = (rng()) * boardW;
+    const py = (rng()) * boardH;
+    const blades = 2 + Math.floor(rng() * 3); // 2–4 spikes per tuft
+    const h  = CELL * (0.08 + rng() * 0.10);  // spike height
+    const spread = CELL * (0.06 + rng() * 0.07);
+    const lean = (rng() - 0.5) * 0.6;
+    const dark = rng() < 0.45; // mix lighter and darker spikes
+    grassDecor.push({ type:'tuft', px, py, blades, h, spread, lean, dark });
+  }
+
+  // Edge tufts — denser along all 4 borders
+  const edgeStep = CELL * 0.55;
+  const edgeH = CELL * (0.14);
+  function addEdgeTuft(px, py, angle) {
+    const h = edgeH * (0.7 + rng() * 0.6);
+    grassDecor.push({ type:'edge_tuft', px, py, h, angle,
+      blades: 2 + Math.floor(rng()*3), spread: CELL*0.08, lean:(rng()-.5)*.5 });
+  }
+  // Top edge
+  for(let x = 0; x < boardW; x += edgeStep * (0.6 + rng()*0.8))
+    addEdgeTuft(x, 2, -Math.PI/2);
+  // Bottom edge
+  for(let x = 0; x < boardW; x += edgeStep * (0.6 + rng()*0.8))
+    addEdgeTuft(x, boardH - 2, Math.PI/2);
+  // Left edge
+  for(let y = 0; y < boardH; y += edgeStep * (0.6 + rng()*0.8))
+    addEdgeTuft(2, y, Math.PI);
+  // Right edge
+  for(let y = 0; y < boardH; y += edgeStep * (0.6 + rng()*0.8))
+    addEdgeTuft(boardW - 2, y, 0);
+}
+
+function mulberry32(seed) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function drawBoard() {
+  // Outer board background — rich soil/earth
+  const boardX = PAD, boardY = PAD;
+  const boardW = COLS*CELL, boardH = ROWS*CELL;
+
+  // Soil base
+  ctx.fillStyle = '#c8a96e';
+  rRect(ctx, boardX, boardY, boardW, boardH, 12); ctx.fill();
+
+  // Soil texture gradient
+  const soilGrad = ctx.createLinearGradient(boardX, boardY, boardX, boardY+boardH);
+  soilGrad.addColorStop(0, 'rgba(180,130,70,.3)');
+  soilGrad.addColorStop(1, 'rgba(100,65,20,.2)');
+  rRect(ctx, boardX, boardY, boardW, boardH, 12);
+  ctx.fillStyle = soilGrad; ctx.fill();
+
+  // ── Seamless grass field ──
+  ctx.save();
+  rRect(ctx, boardX, boardY, boardW, boardH, 12); ctx.clip();
+
+  // 1. Solid warm base green
+  ctx.fillStyle = '#5cb83a';
+  ctx.fillRect(boardX, boardY, boardW, boardH);
+
+  // 2. Gentle diagonal lighting (top-left brighter, bottom-right deeper)
+  const diag = ctx.createLinearGradient(boardX, boardY, boardX+boardW, boardY+boardH);
+  diag.addColorStop(0,   'rgba(200,240,100,.14)');
+  diag.addColorStop(0.5, 'rgba(0,0,0,.0)');
+  diag.addColorStop(1,   'rgba(0,50,0,.18)');
+  ctx.fillStyle = diag;
+  ctx.fillRect(boardX, boardY, boardW, boardH);
+
+  // 3. Soft vignette — edges slightly darker
+  const vig = ctx.createRadialGradient(
+    boardX+boardW/2, boardY+boardH/2, Math.min(boardW,boardH)*.25,
+    boardX+boardW/2, boardY+boardH/2, Math.max(boardW,boardH)*.75
+  );
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,30,0,.16)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(boardX, boardY, boardW, boardH);
+
+  // 4. Grass tufts — interior and edge spikes
+  ctx.lineCap = 'round';
+  for(const d of grassDecor) {
+    if(d.type === 'tuft' || d.type === 'edge_tuft') {
+      const bx = boardX + d.px, by = boardY + d.py;
+      // Lighter spikes for interior, darker for edges
+      const light = d.type === 'edge_tuft' ? '#3d9228' : (d.dark ? '#3a9125' : '#72c94a');
+      ctx.fillStyle = light;
+      ctx.save();
+      ctx.translate(bx, by);
+      if(d.type === 'edge_tuft') ctx.rotate(d.angle + Math.PI/2);
+      // Draw each spike as a slim triangle
+      const spacing = (d.blades - 1) === 0 ? 0 : d.spread * 2 / (d.blades - 1);
+      for(let i = 0; i < d.blades; i++) {
+        const ox = d.blades > 1 ? -d.spread + i * spacing : 0;
+        const tipX = ox + d.lean * d.h * (i - (d.blades-1)/2) * 0.4;
+        const tipY = -d.h * (0.75 + Math.abs(i - (d.blades-1)/2) * 0.15);
+        const w = d.h * 0.18;
+        ctx.beginPath();
+        ctx.moveTo(ox - w, 0);
+        ctx.lineTo(tipX, tipY);
+        ctx.lineTo(ox + w, 0);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  // 5. Flowers / mushrooms
+  for(const d of grassDecor) {
+    if(d.type !== 'flower') continue;
+    if(d.flowerType===0) drawDaisy(d.fx, d.fy);
+    else if(d.flowerType===1) drawClover(d.fx, d.fy);
+    else drawMushroom(d.fx, d.fy);
+  }
+
+  ctx.restore();
+
+  // ── Draw patrol trails ──
+  ctx.save();
+  ctx.setLineDash([3,5]);
+  ctx.lineWidth=1.5;
+  for(const s of STONES) if(s.patrol){
+    ctx.strokeStyle='rgba(120,110,100,0.35)';
+    ctx.beginPath();
+    ctx.moveTo(PAD+s.patrol[0].c*CELL+CELL/2, PAD+s.patrol[0].r*CELL+CELL/2);
+    ctx.lineTo(PAD+s.patrol[1].c*CELL+CELL/2, PAD+s.patrol[1].r*CELL+CELL/2);
+    ctx.stroke();
+    drawSpeedBadge(s.patrol[0], s.patrol[1], s.speed||'medium', 'rgba(80,70,60,0.7)');
+  }
+  for(const b of BUNNIES) if(b.patrol&&!b.eaten){
+    ctx.strokeStyle='rgba(244,114,182,0.3)';
+    ctx.beginPath();
+    ctx.moveTo(PAD+b.patrol[0].c*CELL+CELL/2, PAD+b.patrol[0].r*CELL+CELL/2);
+    ctx.lineTo(PAD+b.patrol[1].c*CELL+CELL/2, PAD+b.patrol[1].r*CELL+CELL/2);
+    ctx.stroke();
+    drawSpeedBadge(b.patrol[0], b.patrol[1], b.speed||'medium', 'rgba(200,80,140,0.7)');
+  }
+  ctx.setLineDash([]);
+  ctx.restore();
+
+  // ── Draw obstacles ──
+  for(const s of STONES)   drawStone(s.pr ?? s.r, s.pc ?? s.c);
+  for(const b of BOUNCERS) drawBouncer(b.r, b.c);
+  const TUNNEL_COLORS = ['#f59e0b','#10b981','#ef4444','#3b82f6','#ec4899','#8b5cf6'];
+  TUNNELS.forEach((pair,pi)=>{
+    const col = TUNNEL_COLORS[pi % TUNNEL_COLORS.length];
+    drawTunnel(pair[0].r,pair[0].c, col);
+    drawTunnel(pair[1].r,pair[1].c, col);
+  });
+  for(const n of NAVIGATORS) drawNavigator(n.r, n.c, n.orient);
+  for(const b of BUNNIES){
+    if(!b.eaten){
+      drawBunny(b.pr ?? b.r, b.pc ?? b.c, 0.35);
+    } else {
+      // Draw departing bunny animation after being eaten
+      const anim = getObsAnim(`bunny:${Math.round(b.pr??b.r)}:${Math.round(b.pc??b.c)}`);
+      if(anim){
+        const bx = PAD+(b.pc??b.c)*CELL+CELL/2;
+        const by = PAD+(b.pr??b.r)*CELL+CELL/2;
+        ctx.save();
+        ctx.globalAlpha = 1-anim.t;
+        ctx.translate(bx, by - anim.t*CELL*0.7); // hop up
+        ctx.rotate(anim.t * Math.PI * 1.5);       // spin
+        ctx.scale(1-anim.t*0.5, 1-anim.t*0.5);   // shrink
+        ctx.translate(-bx, -(by - anim.t*CELL*0.7));
+        drawBunny(b.pr??b.r, b.pc??b.c, anim.t*1.5);
+        ctx.restore();
+      }
+    }
+  }
+
+  // Thin black border
+  ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+  ctx.lineWidth = 1.5;
+  rRect(ctx, boardX, boardY, boardW, boardH, 12); ctx.stroke();
+}
+
+function drawDaisy(x, y) {
+  const r = CELL*.055;
+  const pr = CELL*.04;
+  ctx.fillStyle = '#fff';
+  for(let i=0; i<6; i++){
+    const a = (Math.PI*2/6)*i;
+    ctx.beginPath();
+    ctx.ellipse(x+Math.cos(a)*r*1.6, y+Math.sin(a)*r*1.6, r, r*.6, a, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.beginPath(); ctx.arc(x,y,pr,0,Math.PI*2);
+  ctx.fillStyle='#f9ca24'; ctx.fill();
+}
+
+function drawClover(x, y) {
+  const r = CELL*.05;
+  ctx.fillStyle = '#27ae60';
+  for(let i=0;i<3;i++){
+    const a = (Math.PI*2/3)*i - Math.PI/2;
+    ctx.beginPath();
+    ctx.arc(x+Math.cos(a)*r*1.1, y+Math.sin(a)*r*1.1, r, 0, Math.PI*2);
+    ctx.fill();
+  }
+  // stem
+  ctx.strokeStyle='#27ae60'; ctx.lineWidth=1; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(x,y+r); ctx.lineTo(x,y+r*2.5); ctx.stroke();
+}
+
+function drawMushroom(x, y) {
+  const r = CELL*.055;
+  // cap
+  ctx.fillStyle = '#e74c3c';
+  ctx.beginPath(); ctx.arc(x, y-r*.2, r, Math.PI, 0); ctx.closePath(); ctx.fill();
+  // stem
+  ctx.fillStyle = '#ffeaa7';
+  ctx.fillRect(x-r*.4, y-r*.2, r*.8, r*.9);
+  // spots
+  ctx.fillStyle = 'rgba(255,255,255,.8)';
+  ctx.beginPath(); ctx.arc(x-r*.2, y-r*.5, r*.18, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+r*.3, y-r*.3, r*.13, 0, Math.PI*2); ctx.fill();
+}
+
+function drawStone(r, c) {
+  const x=PAD+c*CELL, y=PAD+r*CELL, s=CELL;
+  const anim = getObsAnim(`stone:${Math.round(r)}:${Math.round(c)}`);
+  let mx=x+s/2, my=y+s/2;
+
+  ctx.save();
+  if(anim){
+    // shake: rapid oscillation in first half, then fade
+    const shake = Math.sin(anim.t * Math.PI * 10) * (1-anim.t) * s*0.12;
+    mx += shake; my += shake*0.5;
+    // red flash overlay after scale
+    if(anim.t > 0.3){
+      const flash = Math.sin((anim.t-0.3)/0.7 * Math.PI) * 0.7;
+      ctx.globalAlpha = 1;
+      // draw a red tint circle on top later
+    }
+  }
+
+  const rad=s*.36;
+  const pts = [
+    [ .00,-.95],[ .45,-.72],[ .90,-.30],[ .95, .20],[ .60, .75],
+    [ .05, .90],[-.55, .80],[-.90, .18],[-.70,-.55],[-.30,-.88],
+  ].map(([px,py])=>[mx+px*rad, my+py*rad]);
+
+  ctx.beginPath(); pts.forEach(([px,py],i)=>i===0?ctx.moveTo(px+3,py+4):ctx.lineTo(px+3,py+4));
+  ctx.closePath(); ctx.fillStyle='rgba(0,0,0,.22)'; ctx.fill();
+
+  ctx.beginPath(); pts.forEach(([px,py],i)=>i===0?ctx.moveTo(px,py):ctx.lineTo(px,py));
+  ctx.closePath();
+  const g=ctx.createRadialGradient(mx-rad*.22,my-rad*.28,rad*.05,mx+rad*.1,my+rad*.1,rad*1.1);
+  g.addColorStop(0,'#d4d0cc'); g.addColorStop(.35,'#9e9b96'); g.addColorStop(.72,'#6e6b66'); g.addColorStop(1,'#45433f');
+  ctx.fillStyle=g; ctx.fill();
+  ctx.strokeStyle='rgba(0,0,0,.35)'; ctx.lineWidth=1.2; ctx.lineJoin='round'; ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(mx-rad*.05,my-rad*.85); ctx.lineTo(mx+rad*.38,my-rad*.55);
+  ctx.lineTo(mx+rad*.18,my-rad*.10); ctx.lineTo(mx-rad*.32,my-rad*.22);
+  ctx.closePath(); ctx.fillStyle='rgba(255,255,255,.18)'; ctx.fill();
+
+  ctx.beginPath(); ctx.ellipse(mx-rad*.40,my-rad*.42,rad*.14,rad*.08,-0.6,0,Math.PI*2);
+  ctx.fillStyle='rgba(255,255,255,.28)'; ctx.fill();
+
+  ctx.strokeStyle='rgba(0,0,0,.28)'; ctx.lineWidth=1.2; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(mx+rad*.08,my-rad*.38); ctx.lineTo(mx+rad*.28,my+rad*.05); ctx.lineTo(mx+rad*.18,my+rad*.38); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(mx-rad*.18,my+rad*.05); ctx.lineTo(mx-rad*.42,my+rad*.38); ctx.stroke();
+
+  // Red flash on hit
+  if(anim && anim.t > 0.25){
+    const flash = Math.sin((anim.t-0.25)/0.75 * Math.PI) * 0.55;
+    ctx.beginPath(); pts.forEach(([px,py],i)=>i===0?ctx.moveTo(px,py):ctx.lineTo(px,py));
+    ctx.closePath(); ctx.fillStyle=`rgba(255,60,60,${flash})`; ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+// ── BOUNCER ── Mario-style bouncy mushroom
+function drawBouncer(r, c) {
+  const x=PAD+c*CELL, y=PAD+r*CELL, s=CELL;
+  const anim = getObsAnim(`bouncer:${r}:${c}`);
+  let scaleY=1, scaleX=1, offY=0;
+  if(anim){
+    // squish down then spring up overshoot
+    const t=anim.t;
+    if(t<0.25){ scaleY=1-0.45*(t/0.25); scaleX=1+0.3*(t/0.25); }
+    else if(t<0.55){ const p=(t-0.25)/0.30; scaleY=0.55+0.65*p; scaleX=1.3-0.4*p; }
+    else { const p=(t-0.55)/0.45; scaleY=1.2-0.2*p; scaleX=0.9+0.1*p; }
+    offY=(1-scaleY)*s*0.3;
+  }
+
+  const mx=x+s/2, my=y+s/2;
+  const capR = s*.34, stemW = s*.18;
+  const capY  = my - s*.06;
+
+  ctx.save();
+  ctx.translate(mx, my);
+  ctx.scale(scaleX, scaleY);
+  ctx.translate(-mx, -my+offY);
+
+  const stemTop = capY + capR*.55;
+  const stemBot = my + s*.38;
+  const sg = ctx.createLinearGradient(mx-stemW, 0, mx+stemW, 0);
+  sg.addColorStop(0,'#c8b89a'); sg.addColorStop(0.3,'#f0e6d0'); sg.addColorStop(0.7,'#e8d8bc'); sg.addColorStop(1,'#b8a484');
+  ctx.fillStyle = sg;
+  ctx.beginPath();
+  ctx.moveTo(mx-stemW, stemBot-4); ctx.arcTo(mx-stemW,stemBot,mx+stemW,stemBot,4);
+  ctx.arcTo(mx+stemW,stemBot,mx+stemW,stemTop,4); ctx.lineTo(mx+stemW,stemTop);
+  ctx.lineTo(mx-stemW,stemTop); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='rgba(0,0,0,.18)'; ctx.lineWidth=1; ctx.stroke();
+
+  ctx.fillStyle='rgba(180,150,100,.5)';
+  ctx.beginPath(); ctx.ellipse(mx-stemW*.4,stemTop+s*.22*.35,stemW*.22,stemW*.18,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(mx+stemW*.4,stemTop+s*.22*.65,stemW*.22,stemW*.18,0,0,Math.PI*2); ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(mx,capY,capR,Math.PI,0);
+  ctx.lineTo(mx+capR,capY+capR*.38);
+  ctx.quadraticCurveTo(mx,capY+capR*.6,mx-capR,capY+capR*.38);
+  ctx.closePath();
+  const cg=ctx.createRadialGradient(mx-capR*.2,capY-capR*.3,capR*.05,mx,capY,capR*1.1);
+  cg.addColorStop(0,'#ff6b6b'); cg.addColorStop(0.4,'#e53935'); cg.addColorStop(1,'#b71c1c');
+  ctx.fillStyle=cg; ctx.fill();
+  ctx.strokeStyle='rgba(0,0,0,.25)'; ctx.lineWidth=1.2; ctx.stroke();
+
+  for(const [sx,sy,sr] of [[-capR*.42,-capR*.28,capR*.13],[capR*.40,-capR*.25,capR*.12],[capR*.05,-capR*.58,capR*.10],[-capR*.15,capR*.08,capR*.09],[capR*.38,capR*.10,capR*.08]]){
+    ctx.beginPath(); ctx.arc(mx+sx,capY+sy,sr,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,.90)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(mx+sx-sr*.25,capY+sy-sr*.3,sr*.4,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,.5)'; ctx.fill();
+  }
+  ctx.beginPath(); ctx.ellipse(mx-capR*.32,capY-capR*.42,capR*.28,capR*.16,-0.5,0,Math.PI*2);
+  ctx.fillStyle='rgba(255,255,255,.28)'; ctx.fill();
+
+  ctx.restore();
+}
+
+// ── TUNNEL ── dark hole with colored pair rim
+function drawTunnel(r, c, pairColor) {
+  const x=PAD+c*CELL, y=PAD+r*CELL, s=CELL;
+  const mx=x+s/2, my=y+s/2, rad=s*.36;
+  const anim = getObsAnim(`tunnel:${r}:${c}`);
+
+  ctx.save();
+
+  // Pulse ring — expands outward on enter or exit
+  if(anim){
+    const pulse = anim.t;
+    const ringR = rad + pulse * rad * 0.9;
+    const alpha = (1-pulse)*0.85;
+    ctx.beginPath(); ctx.arc(mx,my,ringR,0,Math.PI*2);
+    ctx.strokeStyle=pairColor.replace('#','rgba(').replace(/([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i,
+      (_,r,g,b)=>`rgba(${parseInt(r,16)},${parseInt(g,16)},${parseInt(b,16)},${alpha})`);
+    ctx.strokeStyle = hexToRgba(pairColor, alpha);
+    ctx.lineWidth=4; ctx.stroke();
+  }
+
+  // Outer colored rim
+  ctx.beginPath(); ctx.arc(mx,my,rad,0,Math.PI*2);
+  ctx.strokeStyle=pairColor; ctx.lineWidth=4; ctx.stroke();
+
+  // Rim glow
+  ctx.beginPath(); ctx.arc(mx,my,rad,0,Math.PI*2);
+  ctx.strokeStyle=hexToRgba(pairColor,0.3); ctx.lineWidth=8; ctx.stroke();
+
+  // Dark hole fill
+  ctx.beginPath(); ctx.arc(mx,my,rad-3,0,Math.PI*2);
+  ctx.fillStyle='#0a0a0f'; ctx.fill();
+
+  // Depth gradient
+  const depth=ctx.createRadialGradient(mx,my,0,mx,my,rad-3);
+  depth.addColorStop(0,'rgba(0,0,0,1)'); depth.addColorStop(0.55,'rgba(0,0,0,0.85)');
+  depth.addColorStop(0.82,'rgba(40,40,60,0.6)'); depth.addColorStop(1,'rgba(80,80,110,0.0)');
+  ctx.beginPath(); ctx.arc(mx,my,rad-3,0,Math.PI*2); ctx.fillStyle=depth; ctx.fill();
+
+  // Colored tint
+  const tint=ctx.createRadialGradient(mx,my+rad*.3,0,mx,my+rad*.3,rad*.55);
+  tint.addColorStop(0,hexToRgba(pairColor,0.18)); tint.addColorStop(1,hexToRgba(pairColor,0));
+  ctx.beginPath(); ctx.arc(mx,my,rad-3,0,Math.PI*2); ctx.fillStyle=tint; ctx.fill();
+
+  // Highlight crescent
+  ctx.beginPath(); ctx.arc(mx,my,rad-3,Math.PI*1.1,Math.PI*1.9);
+  ctx.strokeStyle='rgba(255,255,255,0.12)'; ctx.lineWidth=3; ctx.stroke();
+
+  ctx.restore();
+}
+
+function hexToRgba(hex, alpha) {
+  const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// ── NAVIGATOR ── reflective line in a cell
+// orient: 'H' horizontal, 'V' vertical, 'D1' top-left↘bottom-right, 'D2' top-right↙bottom-left
+function drawNavigator(r, c, orient) {
+  const x = PAD+c*CELL, y = PAD+r*CELL, s = CELL;
+  const mx = x+s/2, my = y+s/2;
+  const half = s*0.38;
+  const anim = getObsAnim(`nav:${r}:${c}`);
+
+  ctx.save();
+
+  let x1,y1,x2,y2;
+  if(orient==='H'){  x1=mx-half; y1=my;      x2=mx+half; y2=my;      }
+  if(orient==='V'){  x1=mx;      y1=my-half; x2=mx;      y2=my+half; }
+  if(orient==='D1'){ x1=mx-half; y1=my-half; x2=mx+half; y2=my+half; }
+  if(orient==='D2'){ x1=mx+half; y1=my-half; x2=mx-half; y2=my+half; }
+
+  // Flash on hit: bright white pulse that fades
+  const flashAlpha = anim ? Math.sin(anim.t * Math.PI) * 0.9 : 0;
+  const lineColor = anim ? `rgba(${Math.round(56+flashAlpha*199)},${Math.round(189+flashAlpha*66)},248,1)` : '#38bdf8';
+  const lineW = anim ? 4 + flashAlpha*4 : 4;
+
+  ctx.shadowColor = anim ? `rgba(255,255,255,${flashAlpha*0.9})` : 'rgba(56,189,248,0.9)';
+  ctx.shadowBlur = anim ? 8 + flashAlpha*16 : 8;
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+  ctx.strokeStyle=lineColor; ctx.lineWidth=lineW; ctx.lineCap='round'; ctx.stroke();
+
+  ctx.shadowBlur=0;
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+  ctx.strokeStyle = anim ? `rgba(255,255,255,${0.4+flashAlpha*0.6})` : '#e0f7ff';
+  ctx.lineWidth=1.5; ctx.stroke();
+
+  const dotColor = anim ? `rgba(255,255,255,${0.5+flashAlpha*0.5})` : '#7dd3fc';
+  ctx.fillStyle=dotColor;
+  for(const [ex,ey] of [[x1,y1],[x2,y2]]){
+    ctx.beginPath(); ctx.arc(ex,ey, anim?3+flashAlpha*2:3, 0,Math.PI*2); ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+// ── BUNNY ── cute white bunny
+function drawBunny(r, c, wiggle) {
+  const x=PAD+c*CELL, y=PAD+r*CELL, s=CELL;
+  const mx=x+s/2, my=y+s/2;
+  const sc=s*0.18;
+  const wv = wiggle ? Math.sin(performance.now()/70) * wiggle : 0;
+
+  ctx.save();
+
+  // Shadow
+  ctx.beginPath();
+  ctx.ellipse(mx, my+sc*2.2, sc*1.4, sc*0.4, 0, 0, Math.PI*2);
+  ctx.fillStyle='rgba(0,0,0,.15)'; ctx.fill();
+
+  // Body
+  ctx.beginPath();
+  ctx.ellipse(mx, my+sc*0.8, sc*1.15, sc*1.0, 0, 0, Math.PI*2);
+  ctx.fillStyle='#fff'; ctx.fill();
+
+  // Head
+  ctx.beginPath();
+  ctx.ellipse(mx, my-sc*0.7, sc*0.88, sc*0.85, 0, 0, Math.PI*2);
+  ctx.fillStyle='#fff'; ctx.fill();
+
+  // Ears — prominent wiggle
+  for(const [side, ex] of [[-1,-sc*0.45],[1,sc*0.45]]){
+    const earAngle = (ex<0?-0.15:0.15) + wv*side*0.55;
+    ctx.beginPath();
+    ctx.ellipse(mx+ex, my-sc*2.0, sc*0.24, sc*0.76, earAngle, 0, Math.PI*2);
+    ctx.fillStyle='#f0eded'; ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(mx+ex, my-sc*2.0, sc*0.12, sc*0.50, earAngle, 0, Math.PI*2);
+    ctx.fillStyle='#f9a8d4'; ctx.fill();
+  }
+
+  // Eyes — large with three-layer sparkle
+  for(const ex of [-sc*0.33, sc*0.33]){
+    // white base
+    ctx.beginPath();
+    ctx.ellipse(mx+ex, my-sc*0.82, sc*0.20, sc*0.23, 0, 0, Math.PI*2);
+    ctx.fillStyle='#fff'; ctx.fill();
+    // dark iris
+    ctx.beginPath();
+    ctx.ellipse(mx+ex, my-sc*0.82, sc*0.17, sc*0.20, 0, 0, Math.PI*2);
+    ctx.fillStyle='#1a1a2e'; ctx.fill();
+    // big highlight
+    ctx.beginPath();
+    ctx.arc(mx+ex+sc*0.07, my-sc*0.94, sc*0.09, 0, Math.PI*2);
+    ctx.fillStyle='#fff'; ctx.fill();
+    // small sparkle
+    ctx.beginPath();
+    ctx.arc(mx+ex+sc*0.14, my-sc*0.78, sc*0.045, 0, Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.fill();
+    // tiny star sparkle
+    ctx.beginPath();
+    ctx.arc(mx+ex-sc*0.06, my-sc*0.96, sc*0.03, 0, Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,0.7)'; ctx.fill();
+  }
+
+  // Rosy cheeks — large and vivid
+  for(const ex of [-sc*0.58, sc*0.58]){
+    const cg = ctx.createRadialGradient(mx+ex, my-sc*0.50, 0, mx+ex, my-sc*0.50, sc*0.32);
+    cg.addColorStop(0, 'rgba(255,140,170,0.65)');
+    cg.addColorStop(1, 'rgba(255,140,170,0)');
+    ctx.beginPath();
+    ctx.ellipse(mx+ex, my-sc*0.50, sc*0.32, sc*0.20, 0, 0, Math.PI*2);
+    ctx.fillStyle=cg; ctx.fill();
+  }
+
+  // Nose
+  ctx.beginPath();
+  ctx.arc(mx, my-sc*0.56, sc*0.11, 0, Math.PI*2);
+  ctx.fillStyle='#f472b6'; ctx.fill();
+  // nose shine
+  ctx.beginPath();
+  ctx.arc(mx-sc*0.04, my-sc*0.60, sc*0.04, 0, Math.PI*2);
+  ctx.fillStyle='rgba(255,255,255,0.6)'; ctx.fill();
+
+  // Smile — wide and clear
+  ctx.beginPath();
+  ctx.arc(mx, my-sc*0.38, sc*0.22, 0.25, Math.PI-0.25);
+  ctx.strokeStyle='rgba(210,100,140,0.75)'; ctx.lineWidth=sc*0.16; ctx.lineCap='round'; ctx.stroke();
+
+  // Tail
+  ctx.beginPath();
+  ctx.arc(mx+sc*1.0, my+sc*0.6, sc*0.30, 0, Math.PI*2);
+  ctx.fillStyle='#f5f5f5'; ctx.fill();
+
+  ctx.restore();
+}
+
+
+function drawSpeedBadge(wp0, wp1, speed, color) {
+  // Draw chevrons at midpoint of patrol path indicating speed
+  const mx = PAD + (wp0.c + wp1.c) / 2 * CELL + CELL/2;
+  const my = PAD + (wp0.r + wp1.r) / 2 * CELL + CELL/2;
+  const chevrons = speed === 'slow' ? '›' : speed === 'fast' ? '›››' : '››';
+  ctx.save();
+  ctx.font = `bold ${Math.round(CELL * 0.22)}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // background pill
+  const tw = ctx.measureText(chevrons).width;
+  const pw = tw + 8, ph = CELL * 0.26;
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.roundRect(mx - pw/2, my - ph/2, pw, ph, ph/2);
+  ctx.fill();
+  ctx.fillStyle = color;
+  ctx.fillText(chevrons, mx, my);
+  ctx.restore();
+}
+
+function cx(c){return PAD+c*CELL+CELL/2;}
+function cy(r){return PAD+r*CELL+CELL/2;}
+
+function render() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Canvas background (visible around rounded board corners)
+  ctx.fillStyle = '#a8e063';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  drawBoard();
+
+  for(const s of snakes) if(s.alive) drawSnake(s);
+}
+
+function drawSnake(s) {
+  const totalCells = s.cells.length;
+  const hidden = s.tunnelHidden || 0; // tail segments currently inside tunnel
+  // visible = all segments except the last `hidden` ones
+  const visibleCount = Math.max(1, totalCells - hidden);
+
+  // Build interpolated points only for visible segments
+  const pts = [];
+  for(let i=0; i<visibleCount; i++) pts.push(interpPt(s,i));
+  if(!pts.length) return;
+
+  const hovH = hovered && hovered.id===s.id && hovered.end==='head';
+  const hovT = hovered && hovered.id===s.id && hovered.end==='tail';
+  const anyHov = hovH || hovT;
+
+  // If completely inside tunnel, draw nothing
+  if(hidden >= totalCells) return;
+
+  ctx.save();
+  if(anyHov){ ctx.shadowColor=s.color; ctx.shadowBlur=14; }
+
+  // body — draw full path first, then head drawn on top covers the round cap
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0],pts[0][1]);
+  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+  ctx.strokeStyle=s.color; ctx.lineWidth=CELL*0.54;
+  ctx.lineCap='round'; ctx.lineJoin='round'; ctx.stroke();
+
+  // shine
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0],pts[0][1]);
+  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+  ctx.strokeStyle='rgba(255,255,255,0.2)'; ctx.lineWidth=CELL*0.16;
+  ctx.lineCap='round'; ctx.lineJoin='round'; ctx.stroke();
+
+  ctx.shadowBlur=0;
+
+  // head face (always visible unless all hidden)
+  drawSnakeFace(pts[0], s.dirs[0], s.color, hovH, s.id+'h');
+
+  // frozen indicator — pulsing ring prompting player to tap
+  if(s.frozen){
+    const pulse = 0.6 + 0.4 * Math.sin(performance.now() / 220);
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.beginPath(); ctx.arc(pts[0][0], pts[0][1], CELL*0.44, 0, Math.PI*2);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.beginPath(); ctx.arc(pts[0][0], pts[0][1], CELL*0.44, 0, Math.PI*2);
+    ctx.strokeStyle = s.color; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // tail end
+  if(hidden === 0) {
+    // tail fully visible
+    if(s.dirs[1]) {
+      drawSnakeFace(pts[pts.length-1], s.dirs[1], s.color, hovT, s.id+'t');
+    } else {
+      const t=pts[pts.length-1];
+      ctx.beginPath(); ctx.arc(t[0],t[1],CELL*0.18,0,Math.PI*2);
+      ctx.fillStyle=s.color; ctx.fill();
+    }
+  }
+  // if tail is hidden (inside tunnel), draw a fading stub at the last visible point
+  else if(visibleCount > 0) {
+    const t=pts[pts.length-1];
+    const fadeR = CELL*0.18*(1 - hidden/totalCells);
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath(); ctx.arc(t[0],t[1],Math.max(2,fadeR),0,Math.PI*2);
+    ctx.fillStyle=s.color; ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
+}
+
+// ── TONGUE ANIMATION STATE ──
+// tongueStates[faceKey] = { scale: 0..1, out: bool, timer: ms until next change }
+const tongueStates = {};
+
+function getTongueScale(faceKey) {
+  const now = performance.now();
+  if (!tongueStates[faceKey]) {
+    tongueStates[faceKey] = { scale: 0, out: false, nextFlick: now + 600 + Math.random()*1400 };
+  }
+  const st = tongueStates[faceKey];
+  if (now >= st.nextFlick) {
+    st.out = !st.out;
+    st.nextFlick = now + (st.out ? 120 + Math.random()*180 : 500 + Math.random()*1200);
+  }
+  const target = st.out ? 1 : 0;
+  st.scale += (target - st.scale) * 0.35;
+  return st.scale;
+}
+
+function drawSnakeFace(pt, dir, color, glowing, faceKey) {
+  const angle = DIR_ANGLE[dir];
+  const R = CELL * 0.30;
+  const tx = pt[0], ty = pt[1];
+
+  ctx.save();
+  ctx.translate(tx, ty);
+  ctx.rotate(angle);
+
+  // glow ring when hovered
+  if(glowing){
+    ctx.beginPath(); ctx.arc(0,0,R*1.5,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,0.15)'; ctx.fill();
+  }
+
+  // ── TONGUE (drawn behind head) ──
+  const tScale = getTongueScale(faceKey);
+  if (tScale > 0.01) {
+    const tBase = R * 0.92;
+    const tLen  = R * 0.55 * tScale;
+    const tFork = R * 0.16 * tScale;
+
+    ctx.save();
+    ctx.strokeStyle = '#ff4d6d';
+    ctx.lineWidth   = R * 0.13;
+    ctx.lineCap     = 'round';
+
+    ctx.beginPath();
+    ctx.moveTo(tBase, 0);
+    ctx.lineTo(tBase + tLen * 0.5, 0);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(tBase + tLen * 0.5, 0);
+    ctx.lineTo(tBase + tLen, -tFork);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(tBase + tLen * 0.5, 0);
+    ctx.lineTo(tBase + tLen,  tFork);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // ── HEAD CIRCLE ──
+  ctx.beginPath(); ctx.arc(0,0,R,0,Math.PI*2);
+  ctx.fillStyle = color; ctx.fill();
+
+  // slight darker shade on back half
+  const grad = ctx.createLinearGradient(-R,0,R,0);
+  grad.addColorStop(0,'rgba(0,0,0,0.0)');
+  grad.addColorStop(1,'rgba(0,0,0,0.18)');
+  ctx.beginPath(); ctx.arc(0,0,R,0,Math.PI*2);
+  ctx.fillStyle=grad; ctx.fill();
+
+  // ── EYES ──
+  // eyes sit at ±35° from forward axis, slightly forward
+  const eyeDist  = R * 0.52;
+  const eyeY     = R * 0.38;
+  const eyeR     = R * 0.26;
+  const pupilR   = eyeR * 0.52;
+
+  for(const ey of [-eyeY, eyeY]){
+    // white sclera
+    ctx.beginPath(); ctx.arc(eyeDist, ey, eyeR, 0, Math.PI*2);
+    ctx.fillStyle='#fff'; ctx.fill();
+
+    // pupil (slightly forward-offset for direction feel)
+    ctx.beginPath(); ctx.arc(eyeDist + pupilR*0.3, ey, pupilR, 0, Math.PI*2);
+    ctx.fillStyle='#111'; ctx.fill();
+
+    // catchlight
+    ctx.beginPath(); ctx.arc(eyeDist + pupilR*0.3 + pupilR*0.3, ey - pupilR*0.4, pupilR*0.32, 0, Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function rRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y); ctx.arcTo(x+w,y,x+w,y+r,r);
+  ctx.lineTo(x+w,y+h-r); ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
+  ctx.lineTo(x+r,y+h); ctx.arcTo(x,y+h,x,y+h-r,r);
+  ctx.lineTo(x,y+r); ctx.arcTo(x,y,x+r,y,r);
+  ctx.closePath();
+}
+
+// ─── HIT TEST ───
+function snakeAtCell(r,c,excludeId=-1){
+  for(const s of snakes){
+    if(!s.alive||s.id===excludeId) continue;
+    if(s.cells.some(x=>x.r===r&&x.c===c)) return s;
+  }
+  return null;
+}
+
+function snakeBodyAtPixel(px,py,s){
+  const c=Math.floor((px-PAD)/CELL), r=Math.floor((py-PAD)/CELL);
+  return s.cells.some(cell=>cell.r===r&&cell.c===c);
+}
+function snakeEndAtPixel(px,py){
+  const c=Math.floor((px-PAD)/CELL), r=Math.floor((py-PAD)/CELL);
+  if(r<0||r>=ROWS||c<0||c>=COLS) return null;
+  for(const s of snakes){
+    if(!s.alive) continue;
+    const head=s.cells[0], tail=s.cells[s.cells.length-1];
+    if(head.r===r&&head.c===c) return {snake:s, end:'head'};
+    if(s.dirs[1] && tail.r===r&&tail.c===c) return {snake:s, end:'tail'};
+    if(s.cells.some(x=>x.r===r&&x.c===c)) return {snake:s, end:'head'};
+  }
+  return null;
+}
+
+// ─── OBSTACLE HELPERS ───
+// ─── PATROL ANIMATION ───
+const PATROL_SPEEDS = { slow: 0.4, medium: 0.9, fast: 1.6 };
+
+function patrolSpeed(obs) {
+  return PATROL_SPEEDS[obs.speed] ?? PATROL_SPEEDS.medium;
+}
+
+function updatePatrols(dt) {
+  for(const s of STONES) {
+    if(!s.patrol) continue;
+    s.pt += s.pdir * dt * patrolSpeed(s);
+    if(s.pt >= 1){ s.pt=1; s.pdir=-1; }
+    else if(s.pt <= 0){ s.pt=0; s.pdir=1; }
+    s.pr = s.patrol[0].r + (s.patrol[1].r - s.patrol[0].r) * s.pt;
+    s.pc = s.patrol[0].c + (s.patrol[1].c - s.patrol[0].c) * s.pt;
+  }
+  for(const b of BUNNIES) {
+    if(!b.patrol || b.eaten) continue;
+    b.pt += b.pdir * dt * patrolSpeed(b);
+    if(b.pt >= 1){ b.pt=1; b.pdir=-1; }
+    else if(b.pt <= 0){ b.pt=0; b.pdir=1; }
+    b.pr = b.patrol[0].r + (b.patrol[1].r - b.patrol[0].r) * b.pt;
+    b.pc = b.patrol[0].c + (b.patrol[1].c - b.patrol[0].c) * b.pt;
+  }
+}
+
+function isStone(r,c) {
+  return STONES.some(s => {
+    const cr = Math.round(s.pr ?? s.r), cc = Math.round(s.pc ?? s.c);
+    return cr===r && cc===c;
+  });
+}
+function isBouncer(r,c) { return BOUNCERS.some(b=>b.r===r&&b.c===c); }
+function isBunny(r,c) {
+  return BUNNIES.find(b => {
+    if(b.eaten) return false;
+    const cr = Math.round(b.pr ?? b.r), cc = Math.round(b.pc ?? b.c);
+    return cr===r && cc===c;
+  }) || null;
+}
+function tunnelExit(r,c){
+  for(const pair of TUNNELS){
+    if(pair[0].r===r&&pair[0].c===c) return pair[1];
+    if(pair[1].r===r&&pair[1].c===c) return pair[0];
+  }
+  return null;
+}
+function navigatorAt(r,c){ return NAVIGATORS.find(n=>n.r===r&&n.c===c)||null; }
+
+// Navigator reflection:
+// orient H:  parallel={L,R}->fail, perp={U,D}->reverse, diag: flip row-component
+// orient V:  parallel={U,D}->fail, perp={L,R}->reverse, diag: flip col-component
+// orient D1(\\): parallel={UL,DR_}->fail, perp={UR,DL}->reverse, ortho: swap components
+// orient D2(/): parallel={UR,DL}->fail, perp={UL,DR_}->reverse, ortho: swap+negate
+const NAV_REFLECT = {
+  H:  { L:'fail', R:'fail', U:'D', D:'U', UL:'DL', UR:'DR_', DL:'UL', 'DR_':'UR'  },
+  V:  { U:'fail', D:'fail', L:'R', R:'L', UL:'UR', UR:'UL',  DL:'DR_','DR_':'DL'  },
+  D1: { UL:'fail','DR_':'fail', UR:'DL', DL:'UR',  U:'L',  L:'U',  D:'R',  R:'D'  },
+  D2: { UR:'fail', DL:'fail', UL:'DR_','DR_':'UL', U:'R',  R:'U',  D:'L',  L:'D'  },
+};
+function navigateDir(dir, orient){
+  const table = NAV_REFLECT[orient];
+  return table ? (table[dir] || dir) : dir;
+}
+
+const OPP_DIR = {U:'D',D:'U',L:'R',R:'L',UL:'DR_',DR_:'UL',UR:'DL',DL:'UR'};
+
+// ─── SMOOTH ANIMATION ───
+const MOVE_SPEED = 22;
+function dirDelta(dir){ return [DR[dir], DC[dir]]; }
+function deltaToDir(dr,dc){ return Object.keys(DR).find(k=>DR[k]===dr&&DC[k]===dc)||'U'; }
+
+function fireSnake(s, end){
+  if(!s.alive) return;
+  // If this snake is frozen (just ate a bunny), resume it
+  if(s.frozen){
+    const {dr, dc, dir} = s.frozen;
+    s.frozen = null;
+    animating = true; hovered = null;
+    startMove(s, dr, dc, dir);
+    return;
+  }
+  if(animating) return;
+  animating=true; hovered=null;
+  if(end==='tail'){ s.cells.reverse(); s.dirs.reverse(); }
+  const [dr,dc] = dirDelta(s.dirs[0]);
+  startMove(s, dr, dc, s.dirs[0]);
+}
+
+function classifyStep(nr, nc, snakeId, movingDir) {
+  if(isStone(nr,nc))   return 'stone';
+  if(isBouncer(nr,nc)) return 'bounce';
+  const te = tunnelExit(nr,nc);
+  if(te) return {tunnel: te};
+  const nav = navigatorAt(nr,nc);
+  if(nav && movingDir){
+    const result = navigateDir(movingDir, nav.orient);
+    if(result === 'fail') return 'stone';
+    if(result === movingDir) return 'free';
+    return {navigate: result};
+  }
+  const bun = isBunny(nr,nc);
+  if(bun) return {eat_bunny: bun};
+  if(snakeAtCell(nr,nc,snakeId)) return 'snake_hit';
+  if(nr<0||nr>=ROWS||nc<0||nc>=COLS) return 'exit';
+  return 'free';
+}
+
+function startMove(s, dr, dc, dir){
+  const head = s.cells[0];
+  const nr = head.r+dr, nc = head.c+dc;
+  // find the dir string from dr/dc if not provided
+  if(!dir) dir = Object.keys(DR).find(k=>DR[k]===dr&&DC[k]===dc) || 'U';
+  const what = classifyStep(nr, nc, s.id, dir);
+
+  if(what==='stone'||what==='snake_hit'){
+    if(what==='stone') triggerObsAnim(`stone:${nr}:${nc}`, 'stone_hit', 0.5);
+    Music.playSfx('stone');
+    s.anim={dr,dc,progress:0,nextCells:[{r:nr,c:nc},...s.cells.slice(0,-1)],result:what==='stone'?'stone':'collision'};
+    runAnim(); return;
+  }
+  if(what==='bounce'){
+    triggerObsAnim(`bouncer:${nr}:${nc}`, 'bouncer_hit', 0.5);
+    s.anim={dr,dc,progress:0,nextCells:[{r:nr,c:nc},...s.cells.slice(0,-1)],result:'bounce'};
+    runAnim(); return;
+  }
+  if(what&&what.eat_bunny){
+    what.eat_bunny.eaten=true;
+    triggerObsAnim(`bunny:${nr}:${nc}`, 'bunny_eat', 0.55);
+    const nextCells=[{r:nr,c:nc},...s.cells.slice(0,-1)];
+    s.anim={dr,dc,progress:0,nextCells,result:'eat_and_freeze',pendingDr:dr,pendingDc:dc,pendingDir:dir};
+    runAnim(); return;
+  }
+  if(what&&what.navigate){
+    triggerObsAnim(`nav:${nr}:${nc}`, 'nav_hit', 0.4);
+    Music.playSfx('navigate');
+    s.anim={dr,dc,progress:0,nextCells:[{r:nr,c:nc},...s.cells.slice(0,-1)],result:'navigate',newDir:what.navigate};
+    runAnim(); return;
+  }
+  if(what&&what.tunnel){
+    triggerObsAnim(`tunnel:${nr}:${nc}`, 'tunnel_enter', 0.4);
+    Music.playSfx('tunnel_enter');
+    s.tunnelHidden = 0;
+    s.anim={dr,dc,progress:0,nextCells:[{r:nr,c:nc},...s.cells.slice(0,-1)],
+            result:'tunnel_enter', tunnelEntry:{r:nr,c:nc}, tunnelExit_:what.tunnel, hiddenCount:1};
+    runAnim(); return;
+  }
+  s.anim={dr,dc,progress:0,nextCells:[{r:nr,c:nc},...s.cells.slice(0,-1)],result:what==='exit'?'exit':'free'};
+  runAnim();
+}
+
+function runAnim(){
+  let last=null;
+  function frame(ts){
+    if(!last) last=ts;
+    const dt=(ts-last)/1000; last=ts;
+    let anyMoving=false;
+    updatePatrols(dt);
+    updateObsAnims(dt);
+    for(const s of snakes){
+      if(!s.alive||!s.anim) continue;
+      s.anim.progress=Math.min(s.anim.progress+dt*MOVE_SPEED,1);
+      anyMoving=true;
+    }
+    render();
+
+    for(const s of snakes){
+      if(!s.alive||!s.anim||s.anim.progress<1) continue;
+      const a=s.anim; s.anim=null;
+
+      if(a.result==='stone'||a.result==='collision'){
+        s.alive=false; loseLife(); shakeCanvas(); render();
+        animating=false; checkWin(); return;
+      }
+
+      s.cells = a.nextCells;
+
+      // ── ate a bunny → freeze, wait for player tap ──
+      if(a.result==='eat_and_freeze'){
+        Music.playSfx('eat');
+        s.frozen = {dr:a.pendingDr, dc:a.pendingDc, dir:a.pendingDir};
+        animating = false;
+        render(); checkWin(); return;
+      }
+
+      // ── navigate: snake hit a navigator line, change direction ──
+      if(a.result==='navigate'){
+        const newDir=a.newDir;
+        if(newDir===OPP_DIR[deltaToDir(a.dr,a.dc)]){
+          // perpendicular → reverse: just reverse dr/dc
+        }
+        const [ndr,ndc]=dirDelta(newDir);
+        const h=s.cells[0], nr2=h.r+ndr, nc2=h.c+ndc;
+        const w2=classifyStep(nr2,nc2,s.id,newDir);
+        nextStep(s,ndr,ndc,w2,nr2,nc2,frame,newDir); return;
+      }
+
+      if(a.result==='bounce'){
+        Music.playSfx('bounce');
+        const newDr=-a.dr, newDc=-a.dc;
+        const newDir2=deltaToDir(newDr,newDc);
+        const h=s.cells[0], nr2=h.r+newDr, nc2=h.c+newDc;
+        const w2=classifyStep(nr2,nc2,s.id,newDir2);
+        if(w2==='stone'||w2==='snake_hit'||w2==='bounce'){ animating=false; checkWin(); return; }
+        s.anim={dr:newDr,dc:newDc,progress:0,nextCells:[{r:nr2,c:nc2},...s.cells.slice(0,-1)],
+                result:w2==='exit'?'exit':w2&&w2.tunnel?'tunnel_enter':w2&&w2.navigate?'navigate':'free',
+                newDir:w2&&w2.navigate?w2.navigate:null,
+                tunnelEntry:w2&&w2.tunnel?{r:nr2,c:nc2}:null,
+                tunnelExit_:w2&&w2.tunnel?w2.tunnel:null, hiddenCount:w2&&w2.tunnel?1:0};
+        requestAnimationFrame(frame); return;
+      }
+
+      // ── tunnel_enter: each step, one more tail segment gets hidden ──
+      if(a.result==='tunnel_enter'){
+        const entry=a.tunnelEntry, exit=a.tunnelExit_;
+        const hidden=a.hiddenCount; // how many segments are now inside (invisible)
+        s.tunnelHidden = hidden;
+
+        if(hidden>=s.cells.length){
+          // whole snake is inside — teleport all cells to exit, start emerging
+          s.cells = s.cells.map(()=>({r:exit.r,c:exit.c}));
+          s.tunnelHidden = s.cells.length;
+          // first emerge step: head moves one cell past exit
+          const h=s.cells[0], nr2=h.r+a.dr, nc2=h.c+a.dc;
+          const curDir=deltaToDir(a.dr,a.dc);
+          const w2=classifyStep(nr2,nc2,s.id,curDir);
+          if(w2==='stone'||w2==='snake_hit'){
+            s.anim={dr:a.dr,dc:a.dc,progress:0,nextCells:[{r:nr2,c:nc2},...s.cells.slice(0,-1)],result:w2==='stone'?'stone':'collision'};
+          } else {
+            s.anim={dr:a.dr,dc:a.dc,progress:0,nextCells:[{r:nr2,c:nc2},...s.cells.slice(0,-1)],
+                    result:'tunnel_exit', tunnelEntry:entry, tunnelExit_:exit,
+                    hiddenCount:s.cells.length-1};
+          }
+          requestAnimationFrame(frame); return;
+        }
+
+        // keep feeding in: head stays on entry, everything shifts toward entry
+        const next=[{r:entry.r,c:entry.c},...s.cells.slice(0,-1)];
+        s.anim={dr:a.dr,dc:a.dc,progress:0,nextCells:next,result:'tunnel_enter',
+                tunnelEntry:entry,tunnelExit_:exit,hiddenCount:hidden+1};
+        requestAnimationFrame(frame); return;
+      }
+
+      // ── tunnel_exit: each step reveals one more segment ──
+      if(a.result==='tunnel_exit'){
+        const entry=a.tunnelEntry, exit=a.tunnelExit_;
+        const hidden=Math.max(0,a.hiddenCount-1);
+        s.tunnelHidden = hidden;
+        // Trigger exit glow on first emergence
+        if(a.hiddenCount===s.cells.length-1)
+          triggerObsAnim(`tunnel:${exit.r}:${exit.c}`, 'tunnel_exit', 0.5);
+          Music.playSfx('tunnel_exit');
+
+        if(hidden===0){
+          s.tunnelHidden = 0;
+          const h=s.cells[0], nr2=h.r+a.dr, nc2=h.c+a.dc;
+          const d=deltaToDir(a.dr,a.dc);
+          nextStep(s,a.dr,a.dc,classifyStep(nr2,nc2,s.id,d),nr2,nc2,frame,d); return;
+        }
+        // keep emerging
+        const h=s.cells[0], nr2=h.r+a.dr, nc2=h.c+a.dc;
+        const w2=classifyStep(nr2,nc2,s.id,deltaToDir(a.dr,a.dc));
+        if(w2==='stone'||w2==='snake_hit'){
+          s.anim={dr:a.dr,dc:a.dc,progress:0,nextCells:[{r:nr2,c:nc2},...s.cells.slice(0,-1)],result:w2==='stone'?'stone':'collision'};
+        } else {
+          s.anim={dr:a.dr,dc:a.dc,progress:0,nextCells:[{r:nr2,c:nc2},...s.cells.slice(0,-1)],
+                  result:'tunnel_exit',tunnelEntry:entry,tunnelExit_:exit,hiddenCount:hidden};
+        }
+        requestAnimationFrame(frame); return;
+      }
+
+      if(a.result==='exit'){
+        const allOut=s.cells.every(c=>c.r<0||c.r>=ROWS||c.c<0||c.c>=COLS);
+        if(allOut){
+          s.alive=false; render();
+          Music.playSfx('exit');
+          const rect=canvas.getBoundingClientRect();
+          const scx=canvas.width/rect.width,scy=canvas.height/rect.height;
+          burst(rect.left+cx(s.cells[0].c)/scx,rect.top+cy(s.cells[0].r)/scy,s.color);
+          animating=false; checkWin(); return;
+        }
+        const nr2=s.cells[0].r+a.dr, nc2=s.cells[0].c+a.dc;
+        s.anim={dr:a.dr,dc:a.dc,progress:0,nextCells:[{r:nr2,c:nc2},...s.cells.slice(0,-1)],result:'exit'};
+        requestAnimationFrame(frame); return;
+      }
+
+      // free — next step
+      const h=s.cells[0], nr2=h.r+a.dr, nc2=h.c+a.dc;
+      const d=deltaToDir(a.dr,a.dc);
+      nextStep(s,a.dr,a.dc,classifyStep(nr2,nc2,s.id,d),nr2,nc2,frame,d); return;
+    }
+    if(anyMoving) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+function nextStep(s,dr,dc,what,nr,nc,frame,dir){
+  if(!dir) dir=deltaToDir(dr,dc);
+  if(what==='stone'||what==='snake_hit'){
+    s.anim={dr,dc,progress:0,nextCells:[{r:nr,c:nc},...s.cells.slice(0,-1)],result:what==='stone'?'stone':'collision'};
+    requestAnimationFrame(frame); return;
+  }
+  if(what==='bounce'){
+    s.anim={dr,dc,progress:0,nextCells:[{r:nr,c:nc},...s.cells.slice(0,-1)],result:'bounce'};
+    requestAnimationFrame(frame); return;
+  }
+  if(what&&what.eat_bunny){
+    what.eat_bunny.eaten=true;
+    s.anim={dr,dc,progress:0,nextCells:[{r:nr,c:nc},...s.cells.slice(0,-1)],
+            result:'eat_and_freeze',pendingDr:dr,pendingDc:dc,pendingDir:dir};
+    requestAnimationFrame(frame); return;
+  }
+  if(what&&what.navigate){
+    s.anim={dr,dc,progress:0,nextCells:[{r:nr,c:nc},...s.cells.slice(0,-1)],result:'navigate',newDir:what.navigate};
+    requestAnimationFrame(frame); return;
+  }
+  if(what&&what.tunnel){
+    s.tunnelHidden=0;
+    s.anim={dr,dc,progress:0,nextCells:[{r:nr,c:nc},...s.cells.slice(0,-1)],
+            result:'tunnel_enter',tunnelEntry:{r:nr,c:nc},tunnelExit_:what.tunnel,hiddenCount:1};
+    requestAnimationFrame(frame); return;
+  }
+  s.anim={dr,dc,progress:0,nextCells:[{r:nr,c:nc},...s.cells.slice(0,-1)],result:what==='exit'?'exit':'free'};
+  requestAnimationFrame(frame);
+}
+
+// Interpolated pixel position for a cell during animation
+function interpPt(s, cellIdx){
+  if(!s.anim){
+    const cell=s.cells[cellIdx];
+    return [cx(cell.c), cy(cell.r)];
+  }
+  const t=s.anim.progress;
+  // head (idx 0): moves from old head toward new head
+  // each body segment: moves from cells[i] toward cells[i-1] (follow-the-leader)
+  const curr=s.cells[cellIdx];
+  const next=s.anim.nextCells[cellIdx];
+  return [
+    cx(curr.c)+(cx(next.c)-cx(curr.c))*t,
+    cy(curr.r)+(cy(next.r)-cy(curr.r))*t
+  ];
+}
+
+// ─── LIVES / WIN ───
+function loseLife(){
+  lives=Math.max(0,lives-1); updateHearts();
+  Music.playSfx('lose');
+  if(lives===0) setTimeout(()=>showOverlay('lose'),600);
+}
+function updateHearts(){
+  for(let i=1;i<=3;i++) document.getElementById(`h${i}`).classList.toggle('lost',i>lives);
+}
+function checkWin(){
+  if(lives===0) return;
+  const allSnakesGone = snakes.every(s=>!s.alive);
+  const allBunniesEaten = BUNNIES.every(b=>b.eaten);
+  if(allSnakesGone && allBunniesEaten) setTimeout(()=>{
+    Music.stop();
+    Music.playSfx('win');
+    document.getElementById('ov-win-sub').textContent=
+      levelIdx<LEVELS.length-1?'All snakes freed! ✨':'All levels complete! 🏆';
+    showOverlay('win');
+  },400);
+  else if(allSnakesGone && !allBunniesEaten){
+    // Hint — bunnies remain
+    document.getElementById('hint').textContent='🐰 Feed all bunnies first!';
+  }
+}
+function showOverlay(w){
+  document.getElementById('ov-win').classList.toggle('show',w==='win');
+  document.getElementById('ov-lose').classList.toggle('show',w==='lose');
+}
+function hideOverlays(){
+  document.getElementById('ov-win').classList.remove('show');
+  document.getElementById('ov-lose').classList.remove('show');
+}
+
+// ─── INPUT ───
+function getPixel(e){
+  const rect=canvas.getBoundingClientRect();
+  const sx=canvas.width/rect.width, sy=canvas.height/rect.height;
+  const src=e.touches?e.touches[0]:e;
+  return [(src.clientX-rect.left)*sx,(src.clientY-rect.top)*sy];
+}
+canvas.addEventListener('pointerdown',e=>{
+  const [px,py]=getPixel(e);
+  // Check obstacle tap first (only when not animating)
+  if(!animating){
+    const obs = obstacleAtPixel(px,py);
+    if(obs){ enqueueObstacleInfo([obs], null); return; }
+  }
+  // Allow tapping a frozen snake even while "animating" is false but a freeze is active
+  const frozenSnake = snakes.find(s=>s.alive&&s.frozen&&snakeBodyAtPixel(px,py,s));
+  if(frozenSnake){ fireSnake(frozenSnake, 'head'); return; }
+  if(animating) return;
+  const hit=snakeEndAtPixel(px,py);
+  if(hit) fireSnake(hit.snake, hit.end);
+});
+canvas.addEventListener('pointermove',e=>{
+  if(animating) return;
+  const [px,py]=getPixel(e);
+  const obs = obstacleAtPixel(px,py);
+  if(obs){ canvas.style.cursor='pointer'; return; }
+  const hit=snakeEndAtPixel(px,py);
+  const c=Math.floor((px-PAD)/CELL), r=Math.floor((py-PAD)/CELL);
+  let newHov=null;
+  if(hit){
+    const s=hit.snake;
+    const end=hit.end;
+    const endCell = end==='head' ? s.cells[0] : s.cells[s.cells.length-1];
+    if(endCell.r===r && endCell.c===c) newHov={id:s.id, end};
+    else if(end==='head' && s.cells[0].r===r && s.cells[0].c===c) newHov={id:s.id,end:'head'};
+  }
+  const changed = JSON.stringify(newHov)!==JSON.stringify(hovered);
+  if(changed){ hovered=newHov; render(); }
+  canvas.style.cursor=hit?'pointer':'default';
+});
+canvas.addEventListener('pointerleave',()=>{if(hovered){hovered=null;render();}});
+
+// ─── OBSTACLE INFO OVERLAY ───
+const OBSTACLE_INFO = {
+  patrol_stone: {
+    name: 'Patrol Stone',
+    desc: 'A stone that moves back and forth!\nTime your snake carefully — hitting it still costs a heart.',
+    color: '#6b7280',
+    btnColor: '#6b7280',
+  },
+  patrol_bunny: {
+    name: 'Patrol Bunny',
+    desc: 'A bunny on the move!\nCatch it as it passes — you still need to eat every bunny to finish the level.',
+    color: '#f472b6',
+    btnColor: '#f472b6',
+  },
+  bunny: {
+    name: 'Bunny',
+    desc: 'A fluffy bunny waiting to be eaten!\nSnakes pass right through — but ALL bunnies must be eaten before you can finish the level.',
+    color: '#f472b6',
+    btnColor: '#f472b6',
+  },
+  stone: {
+    name: 'Stone',
+    desc: 'A solid rock blocking the path.\nA snake that hits it will be lost — and you\'ll lose a heart!',
+    color: '#6b7280',
+    draw: (ctx, cx, cy, r) => drawStoneAt(ctx, cx, cy, r),
+    btnColor: '#6b7280',
+  },
+  bouncer: {
+    name: 'Bouncer',
+    desc: 'A springy bumper pad.\nWhen a snake hits it, the snake reverses direction and keeps moving the other way!',
+    color: '#f59e0b',
+    draw: (ctx, cx, cy, r) => drawBouncerAt(ctx, cx, cy, r),
+    btnColor: '#f59e0b',
+  },
+  navigator: {
+    name: 'Navigator',
+    desc: 'A deflecting line.\nParallel to it -> you fail.\nPerpendicular -> you reverse.\nAt an angle -> you bounce off at 90 degrees, like light off a mirror!',
+    color: '#0ea5e9',
+    btnColor: '#0ea5e9',
+  },
+  tunnel: {
+    name: 'Tunnel',
+    desc: 'A pair of magic portals.\nA snake that enters one hole will travel underground and emerge from the other!',
+    color: '#7c3aed',
+    draw: (ctx, cx, cy, r) => drawTunnelPairAt(ctx, cx, cy, r),
+    btnColor: '#7c3aed',
+  },
+};
+
+// Track which obstacles the player has already seen
+const seenObstacles = new Set();
+let infoQueue = []; // queue of obstacle types to show
+let infoOnClose = null; // callback after last info dismissed
+
+function enqueueObstacleInfo(types, onClose) {
+  infoQueue = [...types];
+  infoOnClose = onClose;
+  showNextInfo();
+}
+
+function showNextInfo() {
+  if(!infoQueue.length){ if(infoOnClose) infoOnClose(); return; }
+  const type = infoQueue.shift();
+  const info = OBSTACLE_INFO[type];
+  const isNew = !seenObstacles.has(type);
+  seenObstacles.add(type);
+
+  const badge = document.getElementById('info-badge');
+  badge.textContent = isNew ? 'New!' : 'Reminder';
+  badge.className = 'info-badge' + (isNew ? ' new' : '');
+
+  document.getElementById('info-name').textContent = info.name;
+  document.getElementById('info-desc').textContent = info.desc;
+
+  const ok = document.getElementById('info-ok');
+  ok.style.background = info.btnColor;
+  ok.style.color = '#fff';
+
+  // Animated illustration
+  const ic = document.getElementById('info-canvas');
+  const ictx = ic.getContext('2d');
+  ic._animType = type;
+  if(!ic._animRunning){
+    ic._animRunning = true;
+    function animInfo(){
+      if(!ic._animRunning) return;
+      drawInfoIllustration(ictx, ic.width, ic.height, ic._animType);
+      requestAnimationFrame(animInfo);
+    }
+    requestAnimationFrame(animInfo);
+  }
+
+  document.getElementById('ov-info').classList.add('show');
+}
+
+function roundRectCtx(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.arcTo(x+w,y,x+w,y+r,r);
+  ctx.lineTo(x+w,y+h-r); ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
+  ctx.lineTo(x+r,y+h); ctx.arcTo(x,y+h,x,y+h-r,r);
+  ctx.lineTo(x,y+r); ctx.arcTo(x,y,x+r,y,r);
+  ctx.closePath();
+}
+
+// ── Mini snake helper for illustrations ──
+function drawMiniSnake(c, sx, sy, len, dir, color, alpha){
+  const dxMap={R:1,L:-1,U:0,D:0}, dyMap={R:0,L:0,U:-1,D:1};
+  const dx=dxMap[dir]||1, dy=dyMap[dir]||0;
+  c.save(); c.globalAlpha=alpha??1;
+  c.beginPath(); c.moveTo(sx,sy);
+  for(let i=1;i<len;i++) c.lineTo(sx-dx*i*17, sy-dy*i*17);
+  c.strokeStyle=color; c.lineWidth=12; c.lineCap='round'; c.lineJoin='round'; c.stroke();
+  c.strokeStyle='rgba(255,255,255,0.2)'; c.lineWidth=4; c.stroke();
+  c.beginPath(); c.arc(sx,sy,6.5,0,Math.PI*2); c.fillStyle=color; c.fill();
+  const perp=dir==='R'||dir==='L'?[0,1]:[1,0];
+  for(const s of[-1,1]){
+    c.beginPath(); c.arc(sx+dx*3+perp[0]*s*3, sy+dy*3+perp[1]*s*3, 1.6,0,Math.PI*2);
+    c.fillStyle='#111'; c.fill();
+  }
+  c.restore();
+}
+
+function drawArrow2(c, x1,y1,x2,y2, color, alpha){
+  c.save(); c.globalAlpha=alpha??1;
+  const a=Math.atan2(y2-y1,x2-x1);
+  c.beginPath(); c.moveTo(x1,y1); c.lineTo(x2,y2);
+  c.strokeStyle=color; c.lineWidth=2; c.lineCap='round'; c.stroke();
+  c.beginPath();
+  c.moveTo(x2,y2);
+  c.lineTo(x2-9*Math.cos(a-0.4), y2-9*Math.sin(a-0.4));
+  c.lineTo(x2-9*Math.cos(a+0.4), y2-9*Math.sin(a+0.4));
+  c.closePath(); c.fillStyle=color; c.fill();
+  c.restore();
+}
+
+function drawInfoIllustration(c, W, H, type){
+  const t=performance.now()/1000;
+  c.clearRect(0,0,W,H);
+  c.fillStyle='#5cb83a'; roundRectCtx(c,0,0,W,H,12); c.fill();
+  const g=c.createLinearGradient(0,0,W,H);
+  g.addColorStop(0,'rgba(200,240,100,.10)'); g.addColorStop(1,'rgba(0,50,0,.12)');
+  c.fillStyle=g; c.fillRect(0,0,W,H);
+
+  const cx=W/2, cy=H/2;
+  const CP=34; // cell preview size
+
+  if(type==='stone'){
+    const loop=(t%2.8)/2.8;
+    const stoneX=cx+20;
+    const snakeX=loop<0.5 ? 22+(stoneX-CP*.4-22)*(loop/0.5) : stoneX-CP*.4-6;
+    drawMiniSnake(c,snakeX,cy,3,'R','#f472b6');
+    drawStonePreview(c,stoneX,cy,CP);
+    if(loop>0.48&&loop<0.68){
+      const f=Math.sin((loop-0.48)/0.2*Math.PI);
+      c.save(); c.globalAlpha=f; c.font='18px sans-serif'; c.textAlign='center';
+      c.fillText('💥',stoneX-CP*.5,cy-16); c.restore();
+    }
+    drawArrow2(c,snakeX+8,cy,stoneX-CP*.45,cy,'rgba(255,255,255,0.65)',loop<0.48?1:0.15);
+  }
+
+  else if(type==='bouncer'){
+    const loop=(t%3)/3;
+    const mushX=cx+10;
+    let sx,dir;
+    if(loop<0.35){      sx=20+(mushX-CP*.5-20)*(loop/0.35); dir='R'; }
+    else if(loop<0.52){ sx=mushX-CP*.5; dir='R'; }
+    else {              sx=mushX-CP*.5-(mushX-20)*((loop-0.52)/0.48); dir='L'; }
+    drawMiniSnake(c,sx,cy,3,dir,'#60a5fa');
+    drawBouncerPreview(c,mushX,cy,CP);
+    if(loop>0.35&&loop<0.55){
+      c.save(); c.globalAlpha=Math.sin((loop-0.35)/0.2*Math.PI);
+      c.font='15px sans-serif'; c.fillStyle='#fff'; c.textAlign='center';
+      c.fillText('↩',mushX-4,cy-20); c.restore();
+    }
+    drawArrow2(c,sx+8,cy-3,mushX-CP*.45,cy-3,'rgba(255,255,255,0.6)',loop<0.35?1:0);
+    drawArrow2(c,mushX-CP*.45,cy+5,24,cy+5,'rgba(255,220,50,0.85)',loop>0.52?1:0);
+  }
+
+  else if(type==='tunnel'){
+    const loop=(t%3.2)/3.2;
+    const hL=cx-42, hR=cx+42;
+    for(const [hx,col] of [[hL,'#f59e0b'],[hR,'#f59e0b']]){
+      c.beginPath(); c.arc(hx,cy,15,0,Math.PI*2);
+      c.strokeStyle=col; c.lineWidth=3; c.stroke();
+      c.beginPath(); c.arc(hx,cy,12,0,Math.PI*2);
+      c.fillStyle='#0a0a0f'; c.fill();
+    }
+    c.save(); c.setLineDash([4,5]); c.strokeStyle='rgba(245,158,11,0.5)'; c.lineWidth=1.5;
+    c.beginPath(); c.moveTo(hL+15,cy); c.lineTo(hR-15,cy); c.stroke();
+    c.setLineDash([]); c.restore();
+    if(loop<0.36){
+      const sx=14+(hL-14-14)*( loop/0.36);
+      drawMiniSnake(c,sx,cy,3,'R','#4ade80');
+    } else if(loop<0.54){
+      const f=Math.sin((loop-0.36)/0.18*Math.PI);
+      c.save(); c.globalAlpha=f*0.8; c.font='13px sans-serif'; c.fillStyle='#fff';
+      c.textAlign='center'; c.fillText('···',cx,cy-20); c.restore();
+    } else {
+      const sx=hR+12+(W-16-(hR+12))*((loop-0.54)/0.46);
+      drawMiniSnake(c,sx,cy,3,'R','#4ade80');
+    }
+  }
+
+  else if(type==='navigator'){
+    const loop=(t%2.8)/2.8;
+    const navX=cx+6, navY=cy-4;
+    drawNavigatorPreview(c,navX,navY,CP);
+    if(loop<0.42){
+      // snake approaching from left going R
+      const sx=14+(navX-CP*.42-14)*(loop/0.42);
+      drawMiniSnake(c,sx,navY,3,'R','#a78bfa');
+      drawArrow2(c,sx+9,navY,navX-CP*.38,navY,'rgba(255,255,255,0.6)');
+    } else {
+      // deflected downward (D1: R→D)
+      const prog=(loop-0.42)/0.58;
+      const sy=navY+prog*38;
+      drawMiniSnake(c,navX,sy,3,'D','#a78bfa');
+      drawArrow2(c,navX,navY+6,navX,navY+40,'rgba(255,255,255,0.6)');
+    }
+  }
+
+  else if(type==='bunny'){
+    // Phase 0-0.30: snake approaches bunny
+    // Phase 0.30-0.45: snake reaches bunny, bunny eaten, snake STOPS, pulsing ring
+    // Phase 0.45-0.70: snake frozen, tap indicator pulses
+    // Phase 0.70-1.00: snake resumes and exits right
+    const loop=(t%3.2)/3.2;
+    const bx=cx+8;
+    const eatX=bx-8; // where head is when it eats
+
+    if(loop<0.30){
+      // approaching
+      const sx=14+(eatX-14)*(loop/0.30);
+      const ba=sx>bx-14 ? Math.max(0,1-(sx-(bx-14))/16) : 1;
+      if(ba>0.02){ c.save(); c.globalAlpha=ba; drawBunnyPreview(c,bx,cy,CP); c.restore(); }
+      drawMiniSnake(c,sx,cy,3,'R','#fbbf24');
+      drawArrow2(c,sx+9,cy,bx-14,cy,'rgba(255,255,255,0.6)');
+    }
+    else if(loop<0.68){
+      // stopped — bunny eaten, snake frozen with pulsing ring
+      const freeze=(loop-0.30)/0.38;
+      drawMiniSnake(c,eatX,cy,3,'R','#fbbf24');
+      // pulsing ring
+      const pulse=0.5+0.5*Math.sin(t*6);
+      c.save();
+      c.globalAlpha=pulse*0.9;
+      c.beginPath(); c.arc(eatX,cy,11,0,Math.PI*2);
+      c.strokeStyle='#fff'; c.lineWidth=2.5; c.stroke();
+      c.beginPath(); c.arc(eatX,cy,11,0,Math.PI*2);
+      c.strokeStyle='#fbbf24'; c.lineWidth=1.2; c.stroke();
+      c.restore();
+      // tap hint
+      const tapAlpha=0.5+0.5*Math.sin(t*3);
+      c.save(); c.globalAlpha=tapAlpha;
+      c.font='bold 11px sans-serif'; c.fillStyle='#fff';
+      c.textAlign='center'; c.fillText('tap to continue',W/2,H-9);
+      c.restore();
+      // eaten indicator
+      if(freeze>0.15){
+        c.save(); c.globalAlpha=Math.min(1,(freeze-0.15)/0.2);
+        c.font='14px sans-serif'; c.textAlign='center';
+        c.fillText('😋',bx,cy-22); c.restore();
+      }
+    }
+    else {
+      // resumed — snake exits right
+      const sx=eatX+(W-14-eatX)*((loop-0.68)/0.32);
+      drawMiniSnake(c,sx,cy,3,'R','#fbbf24');
+      c.save(); c.globalAlpha=Math.max(0,1-(loop-0.68)/0.15);
+      c.font='14px sans-serif'; c.textAlign='center';
+      c.fillText('😋',bx,cy-22); c.restore();
+    }
+  }
+
+  else if(type==='patrol_stone'){
+    const px=28+(W-56)*((Math.sin(t*0.85)+1)/2);
+    drawStonePreview(c,px,cy,CP);
+    c.save(); c.setLineDash([3,5]); c.strokeStyle='rgba(255,255,255,0.25)'; c.lineWidth=1.5;
+    c.beginPath(); c.moveTo(28,cy+22); c.lineTo(W-28,cy+22); c.stroke();
+    c.setLineDash([]); c.restore();
+    drawMiniSnake(c,16,cy,2,'R','#f472b6');
+    c.font='bold 10px sans-serif'; c.fillStyle='rgba(255,255,255,0.55)';
+    c.textAlign='center'; c.fillText('time your move!',W/2,H-9);
+  }
+
+  else if(type==='patrol_bunny'){
+    const py=16+(H-36)*((Math.sin(t*0.85)+1)/2);
+    c.save(); c.setLineDash([3,5]); c.strokeStyle='rgba(244,114,182,0.35)'; c.lineWidth=1.5;
+    c.beginPath(); c.moveTo(cx+2,16); c.lineTo(cx+2,H-16); c.stroke();
+    c.setLineDash([]); c.restore();
+    drawBunnyPreview(c,cx+2,py,CP);
+    drawMiniSnake(c,18,cy,2,'R','#34d399');
+    c.font='bold 10px sans-serif'; c.fillStyle='rgba(255,255,255,0.55)';
+    c.textAlign='center'; c.fillText('intercept the bunny!',W/2,H-9);
+  }
+}
+
+function drawStonePreview(ictx, ox, oy, cellSize) {
+  const rad = cellSize * 0.36;
+  const pts = [
+    [ .00,-.95],[ .45,-.72],[ .90,-.30],[ .95, .20],[ .60, .75],
+    [ .05, .90],[-.55, .80],[-.90, .18],[-.70,-.55],[-.30,-.88],
+  ].map(([px,py])=>[ox+px*rad, oy+py*rad]);
+  ictx.save();
+  ictx.beginPath(); pts.forEach(([px,py],i)=>i===0?ictx.moveTo(px+2,py+3):ictx.lineTo(px+2,py+3));
+  ictx.closePath(); ictx.fillStyle='rgba(0,0,0,.18)'; ictx.fill();
+  ictx.beginPath(); pts.forEach(([px,py],i)=>i===0?ictx.moveTo(px,py):ictx.lineTo(px,py));
+  ictx.closePath();
+  const g=ictx.createRadialGradient(ox-rad*.22,oy-rad*.28,rad*.05,ox+rad*.1,oy+rad*.1,rad*1.1);
+  g.addColorStop(0,'#d4d0cc'); g.addColorStop(.35,'#9e9b96'); g.addColorStop(.72,'#6e6b66'); g.addColorStop(1,'#45433f');
+  ictx.fillStyle=g; ictx.fill();
+  ictx.strokeStyle='rgba(0,0,0,.35)'; ictx.lineWidth=1.2; ictx.lineJoin='round'; ictx.stroke();
+  ictx.beginPath();
+  ictx.moveTo(ox-rad*.05,oy-rad*.85); ictx.lineTo(ox+rad*.38,oy-rad*.55);
+  ictx.lineTo(ox+rad*.18,oy-rad*.10); ictx.lineTo(ox-rad*.32,oy-rad*.22); ictx.closePath();
+  ictx.fillStyle='rgba(255,255,255,.18)'; ictx.fill();
+  ictx.restore();
+}
+
+function drawBouncerPreview(ictx, ox, oy, cellSize) {
+  const s = cellSize;
+  const capR = s*.34, stemW = s*.18, stemH = s*.22;
+  const capY = oy - s*.06;
+  ictx.save();
+  // stem
+  const stemTop = capY + capR*.55, stemBot = oy + s*.38;
+  const sg = ictx.createLinearGradient(ox-stemW,0,ox+stemW,0);
+  sg.addColorStop(0,'#c8b89a'); sg.addColorStop(0.5,'#f0e6d0'); sg.addColorStop(1,'#b8a484');
+  ictx.fillStyle=sg;
+  ictx.beginPath();
+  ictx.moveTo(ox-stemW,stemBot-4); ictx.arcTo(ox-stemW,stemBot,ox+stemW,stemBot,4);
+  ictx.arcTo(ox+stemW,stemBot,ox+stemW,stemTop,4); ictx.lineTo(ox+stemW,stemTop);
+  ictx.lineTo(ox-stemW,stemTop); ictx.closePath(); ictx.fill();
+  ictx.strokeStyle='rgba(0,0,0,.18)'; ictx.lineWidth=1; ictx.stroke();
+  // cap
+  ictx.beginPath();
+  ictx.arc(ox,capY,capR,Math.PI,0);
+  ictx.lineTo(ox+capR,capY+capR*.38);
+  ictx.quadraticCurveTo(ox,capY+capR*.6,ox-capR,capY+capR*.38);
+  ictx.closePath();
+  const cg=ictx.createRadialGradient(ox-capR*.2,capY-capR*.3,capR*.05,ox,capY,capR*1.1);
+  cg.addColorStop(0,'#ff6b6b'); cg.addColorStop(.4,'#e53935'); cg.addColorStop(1,'#b71c1c');
+  ictx.fillStyle=cg; ictx.fill();
+  ictx.strokeStyle='rgba(0,0,0,.25)'; ictx.lineWidth=1.2; ictx.stroke();
+  // spots
+  for(const [sx,sy,sr] of [[-capR*.42,-capR*.28,capR*.13],[capR*.40,-capR*.25,capR*.12],[capR*.05,-capR*.58,capR*.10]]){
+    ictx.beginPath(); ictx.arc(ox+sx,capY+sy,sr,0,Math.PI*2);
+    ictx.fillStyle='rgba(255,255,255,.9)'; ictx.fill();
+  }
+  ictx.restore();
+}
+
+function drawTunnelPreview(ictx, S) {
+  const pairs = [
+    {cx:S*0.3, cy:S*0.5, col:'#f59e0b'},
+    {cx:S*0.7, cy:S*0.5, col:'#f59e0b'},
+  ];
+  // dashed connector
+  ictx.save();
+  ictx.setLineDash([4,4]);
+  ictx.strokeStyle='rgba(245,158,11,0.4)'; ictx.lineWidth=1.5;
+  ictx.beginPath(); ictx.moveTo(pairs[0].cx,pairs[0].cy); ictx.lineTo(pairs[1].cx,pairs[1].cy); ictx.stroke();
+  ictx.setLineDash([]);
+  ictx.restore();
+
+  for(const {cx,cy,col} of pairs){
+    const rad=S*0.26;
+    ictx.save();
+    // glow
+    ictx.beginPath(); ictx.arc(cx,cy,rad,0,Math.PI*2);
+    ictx.strokeStyle=col.replace(')',',0.3)').replace('rgb','rgba'); ictx.lineWidth=7; ictx.stroke();
+    // rim
+    ictx.beginPath(); ictx.arc(cx,cy,rad,0,Math.PI*2);
+    ictx.strokeStyle=col; ictx.lineWidth=3.5; ictx.stroke();
+    // void
+    ictx.beginPath(); ictx.arc(cx,cy,rad-3,0,Math.PI*2);
+    ictx.fillStyle='#0a0a0f'; ictx.fill();
+    // depth
+    const dg=ictx.createRadialGradient(cx,cy,0,cx,cy,rad-3);
+    dg.addColorStop(0,'rgba(0,0,0,1)'); dg.addColorStop(0.75,'rgba(30,30,50,0.6)'); dg.addColorStop(1,'rgba(80,80,110,0)');
+    ictx.beginPath(); ictx.arc(cx,cy,rad-3,0,Math.PI*2); ictx.fillStyle=dg; ictx.fill();
+    // crescent
+    ictx.beginPath(); ictx.arc(cx,cy,rad-3,Math.PI*1.1,Math.PI*1.9);
+    ictx.strokeStyle='rgba(255,255,255,0.12)'; ictx.lineWidth=2.5; ictx.stroke();
+    ictx.restore();
+  }
+}
+
+document.getElementById('info-ok').addEventListener('click', ()=>{
+  document.getElementById('ov-info').classList.remove('show');
+  const ic = document.getElementById('info-canvas');
+  ic._animRunning = false;
+  setTimeout(showNextInfo, 200);
+});
+
+// Detect which obstacle type is at a canvas pixel
+function drawNavigatorPreview(ictx, ox, oy, cellSize) {
+  const rad = cellSize * 0.36;
+  const half = cellSize * 0.38;
+  ictx.save();
+  ictx.beginPath(); ictx.arc(ox,oy,rad,0,Math.PI*2);
+  ictx.fillStyle='rgba(15,20,40,0.85)'; ictx.fill();
+  ictx.strokeStyle='rgba(56,189,248,0.5)'; ictx.lineWidth=2; ictx.stroke();
+  // D1 diagonal line
+  ictx.shadowColor='rgba(56,189,248,0.9)'; ictx.shadowBlur=8;
+  ictx.beginPath(); ictx.moveTo(ox-half,oy-half); ictx.lineTo(ox+half,oy+half);
+  ictx.strokeStyle='#38bdf8'; ictx.lineWidth=4; ictx.lineCap='round'; ictx.stroke();
+  ictx.shadowBlur=0;
+  ictx.beginPath(); ictx.moveTo(ox-half,oy-half); ictx.lineTo(ox+half,oy+half);
+  ictx.strokeStyle='#e0f7ff'; ictx.lineWidth=1.5; ictx.stroke();
+  ictx.fillStyle='#7dd3fc';
+  ictx.beginPath(); ictx.arc(ox-half,oy-half,3,0,Math.PI*2); ictx.fill();
+  ictx.beginPath(); ictx.arc(ox+half,oy+half,3,0,Math.PI*2); ictx.fill();
+  ictx.restore();
+}
+
+function drawBunnyPreview(ictx, ox, oy, cellSize) {
+  const sc = cellSize * 0.18;
+  ictx.save();
+  ictx.beginPath(); ictx.ellipse(ox,oy+sc*2.2,sc*1.4,sc*0.4,0,0,Math.PI*2);
+  ictx.fillStyle="rgba(0,0,0,.12)"; ictx.fill();
+  ictx.beginPath(); ictx.ellipse(ox,oy+sc*0.8,sc*1.15,sc*1.0,0,0,Math.PI*2);
+  ictx.fillStyle="#fff"; ictx.fill();
+  ictx.beginPath(); ictx.ellipse(ox,oy-sc*0.7,sc*0.88,sc*0.85,0,0,Math.PI*2);
+  ictx.fillStyle="#fff"; ictx.fill();
+  for(const ex of [-sc*0.45,sc*0.45]){
+    const a=ex<0?-0.15:0.15;
+    ictx.beginPath(); ictx.ellipse(ox+ex,oy-sc*2.0,sc*0.24,sc*0.76,a,0,Math.PI*2);
+    ictx.fillStyle="#f0eded"; ictx.fill();
+    ictx.beginPath(); ictx.ellipse(ox+ex,oy-sc*2.0,sc*0.12,sc*0.50,a,0,Math.PI*2);
+    ictx.fillStyle="#f9a8d4"; ictx.fill();
+  }
+  for(const ex of [-sc*0.33,sc*0.33]){
+    ictx.beginPath(); ictx.ellipse(ox+ex,oy-sc*0.82,sc*0.20,sc*0.23,0,0,Math.PI*2);
+    ictx.fillStyle="#fff"; ictx.fill();
+    ictx.beginPath(); ictx.ellipse(ox+ex,oy-sc*0.82,sc*0.17,sc*0.20,0,0,Math.PI*2);
+    ictx.fillStyle="#1a1a2e"; ictx.fill();
+    ictx.beginPath(); ictx.arc(ox+ex+sc*0.07,oy-sc*0.94,sc*0.09,0,Math.PI*2);
+    ictx.fillStyle="#fff"; ictx.fill();
+    ictx.beginPath(); ictx.arc(ox+ex+sc*0.14,oy-sc*0.78,sc*0.045,0,Math.PI*2);
+    ictx.fillStyle="rgba(255,255,255,0.9)"; ictx.fill();
+  }
+  for(const ex of [-sc*0.58,sc*0.58]){
+    const cg=ictx.createRadialGradient(ox+ex,oy-sc*0.50,0,ox+ex,oy-sc*0.50,sc*0.32);
+    cg.addColorStop(0,"rgba(255,140,170,0.65)"); cg.addColorStop(1,"rgba(255,140,170,0)");
+    ictx.beginPath(); ictx.ellipse(ox+ex,oy-sc*0.50,sc*0.32,sc*0.20,0,0,Math.PI*2);
+    ictx.fillStyle=cg; ictx.fill();
+  }
+  ictx.beginPath(); ictx.arc(ox,oy-sc*0.56,sc*0.11,0,Math.PI*2);
+  ictx.fillStyle="#f472b6"; ictx.fill();
+  ictx.beginPath(); ictx.arc(ox,oy-sc*0.38,sc*0.22,0.25,Math.PI-0.25);
+  ictx.strokeStyle="rgba(210,100,140,0.75)"; ictx.lineWidth=sc*0.16; ictx.lineCap="round"; ictx.stroke();
+  ictx.beginPath(); ictx.arc(ox+sc*1.0,oy+sc*0.6,sc*0.30,0,Math.PI*2);
+  ictx.fillStyle="#f5f5f5"; ictx.fill();
+  ictx.restore();
+}
+
+function drawPatrolPreview(ictx, ox, oy, cellSize, kind) {
+  const S = cellSize * 2.2;
+  const x1 = ox - S/2, x2 = ox + S/2;
+  ictx.save();
+  // dashed path line
+  ictx.setLineDash([4,4]);
+  ictx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ictx.lineWidth = 2;
+  ictx.beginPath(); ictx.moveTo(x1, oy); ictx.lineTo(x2, oy); ictx.stroke();
+  ictx.setLineDash([]);
+  // end dots
+  for(const ex of [x1, x2]){
+    ictx.beginPath(); ictx.arc(ex, oy, 4, 0, Math.PI*2);
+    ictx.fillStyle='rgba(255,255,255,0.5)'; ictx.fill();
+  }
+  // Draw the obstacle at centre
+  if(kind==='stone') drawStonePreview(ictx, ox, oy, cellSize);
+  else               drawBunnyPreview(ictx, ox, oy, cellSize);
+  // motion arrows
+  ictx.fillStyle='rgba(255,255,255,0.55)';
+  for(const [sx,dir] of [[x1+14,1],[x2-14,-1]]){
+    ictx.beginPath();
+    ictx.moveTo(sx, oy);
+    ictx.lineTo(sx - dir*9, oy-6);
+    ictx.lineTo(sx - dir*9, oy+6);
+    ictx.closePath(); ictx.fill();
+  }
+  ictx.restore();
+}
+
+function obstacleAtPixel(px, py) {
+  const c = Math.floor((px-PAD)/CELL), r = Math.floor((py-PAD)/CELL);
+  if(r<0||r>=ROWS||c<0||c>=COLS) return null;
+  if(STONES.some(s=>Math.round(s.pr??s.r)===r&&Math.round(s.pc??s.c)===c)) return 'stone';
+  if(BOUNCERS.some(b=>b.r===r&&b.c===c))    return 'bouncer';
+  if(NAVIGATORS.some(n=>n.r===r&&n.c===c))  return 'navigator';
+  if(BUNNIES.some(b=>!b.eaten&&Math.round(b.pr??b.r)===r&&Math.round(b.pc??b.c)===c)) return 'bunny';
+  for(const pair of TUNNELS)
+    if((pair[0].r===r&&pair[0].c===c)||(pair[1].r===r&&pair[1].c===c)) return 'tunnel';
+  return null;
+}
+const EMOJIS=['✨','🌟','💫','⭐','🎯'];
+function burst(x,y,color){
+  for(let i=0;i<10;i++){
+    const el=document.createElement('span');
+    el.className='particle'; el.textContent=EMOJIS[i%EMOJIS.length];
+    const a=(Math.PI*2/10)*i, d=40+Math.random()*50;
+    el.style.left=x+'px'; el.style.top=y+'px';
+    el.style.setProperty('--tx',Math.cos(a)*d+'px');
+    el.style.setProperty('--ty',Math.sin(a)*d+'px');
+    document.body.appendChild(el); setTimeout(()=>el.remove(),800);
+  }
+}
+function shakeCanvas(){
+  const w=document.getElementById('maze-wrap');
+  w.classList.add('shaking'); setTimeout(()=>w.classList.remove('shaking'),450);
+}
+
+// ─── FIT ───
+function fitCanvas(){
+  const stage=document.getElementById('stage');
+  const maxW=Math.max(stage.clientWidth-24, 100);
+  const maxH=Math.max(stage.clientHeight-60, 100);
+  if(!canvas.width||!canvas.height) return;
+  const scale=Math.min(maxW/canvas.width, maxH/canvas.height, 1.3);
+  canvas.style.width=canvas.width*scale+'px';
+  canvas.style.height=canvas.height*scale+'px';
+}
+window.addEventListener('resize',()=>{fitCanvas();render();});
+
+// ─── BUTTONS ───
+document.getElementById('btn-next').addEventListener('click',()=>{
+  hideOverlays(); lives=3; levelIdx=(levelIdx+1)%LEVELS.length; loadLevel(levelIdx);
+});
+document.getElementById('btn-restart').addEventListener('click',()=>{
+  hideOverlays(); lives=3; loadLevel(levelIdx);
+});
+document.getElementById('btn-reset').addEventListener('click',()=>{
+  hideOverlays(); loadLevel(levelIdx);
+});
+document.getElementById('btn-prev-level').addEventListener('click',()=>{
+  if(levelIdx>0){ hideOverlays(); lives=3; levelIdx--; loadLevel(levelIdx); }
+});
+document.getElementById('btn-next-level').addEventListener('click',()=>{
+  if(levelIdx<LEVELS.length-1){ hideOverlays(); lives=3; levelIdx++; loadLevel(levelIdx); }
+});
+
+function updateLevelNav(){
+  document.getElementById('btn-prev-level').disabled = levelIdx===0;
+  document.getElementById('btn-next-level').disabled = levelIdx===LEVELS.length-1;
+}
+
+// ─────────────────────────────────────────────
+// WELCOME MUSIC — soft lullaby, auto-starts
+// ─────────────────────────────────────────────
+const WelcomeMusic = (() => {
+  let ac = null, master = null, seq = null, nextTime = 0, step = 0;
+
+  // ── Hand-composed melody in C major pentatonic ──
+  // Each entry: [semitones above C4, duration in beats, velocity 0–1]
+  // Two 16-beat phrases that repeat. Slow, singable, memorable.
+  const MEL = [
+    // Phrase A — gentle rise and curl
+    [0,  1,  0.80], [4,  0.5,0.65], [7,  0.5,0.70], [9,  1.5,0.85],
+    [7,  0.5,0.60], [4,  0.5,0.65], [5,  1,  0.70], [4,  1,  0.75],
+    [2,  0.5,0.60], [4,  0.5,0.65], [7,  1,  0.80], [9,  2,  0.90],
+    [7,  0.5,0.55], [5,  0.5,0.60], [4,  1,  0.70], [0,  2,  0.85],
+    // Phrase B — climbs to the octave, floats back
+    [5,  1,  0.70], [7,  0.5,0.65], [9,  0.5,0.75], [12, 1.5,0.90],
+    [9,  0.5,0.60], [7,  0.5,0.65], [5,  1,  0.70], [4,  1,  0.75],
+    [7,  1,  0.75], [9,  0.5,0.65], [12, 0.5,0.80], [14, 2,  0.95],
+    [12, 0.5,0.60], [9,  0.5,0.65], [7,  1,  0.72], [0,  3,  0.88],
+  ];
+
+  // ── Counter-melody (lower, quieter, fills gaps) ──
+  const COUNTER = [
+    [-5, 2, 0.30], [0,  1, 0.25], [-3, 1, 0.28], [-5, 2, 0.30],
+    [-7, 2, 0.28], [-5, 1, 0.25], [-3, 1, 0.28], [-5, 2, 0.30],
+    [-3, 2, 0.28], [-5, 1, 0.25], [0,  1, 0.30], [-3, 2, 0.28],
+    [-5, 2, 0.30], [-7, 1, 0.25], [-5, 1, 0.28], [-8, 4, 0.32],
+    [-3, 2, 0.30], [-5, 1, 0.25], [-3, 1, 0.28], [-1, 2, 0.32],
+    [-3, 2, 0.28], [-5, 1, 0.25], [-3, 1, 0.28], [-5, 2, 0.30],
+    [-3, 2, 0.28], [0,  1, 0.30], [-3, 1, 0.28], [-1, 2, 0.32],
+    [-5, 2, 0.30], [-7, 1, 0.25], [-5, 1, 0.28], [-12,4, 0.35],
+  ];
+
+  // ── Bass: root-fifth arpeggios, one per beat ──
+  // Indexed by beat position mod 4
+  const BASS_ARPS = [[0,0],[7,0],[4,0],[7,0]];
+
+  const BPM   = 62;   // slow, dreamy
+  const ROOT  = 60;   // C4
+
+  function freq(semis) { return 440 * Math.pow(2, (ROOT + semis - 69) / 12); }
+
+  function makeReverb(ctx) {
+    const len = ctx.sampleRate * 2.5;
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const d = buf.getChannelData(c);
+      for (let i = 0; i < len; i++)
+        d[i] = (Math.random()*2-1) * Math.pow(1-i/len, 2.2) * (i < ctx.sampleRate*0.01 ? i/(ctx.sampleRate*0.01) : 1);
+    }
+    const conv = ctx.createConvolver(); conv.buffer = buf; return conv;
+  }
+
+  function note(f, wave, vol, atk, hold, rel, when, lpHz, detune) {
+    if (!ac) return;
+    const osc = ac.createOscillator(), g = ac.createGain(), lp = ac.createBiquadFilter();
+    lp.type='lowpass'; lp.frequency.value=lpHz||800; lp.Q.value=0.5;
+    osc.type=wave; osc.frequency.value=f;
+    osc.detune.value=(Math.random()-0.5)*(detune||5);
+    g.gain.setValueAtTime(0,when);
+    g.gain.linearRampToValueAtTime(vol,when+atk);
+    g.gain.setValueAtTime(vol,when+atk+hold);
+    g.gain.exponentialRampToValueAtTime(0.0001,when+atk+hold+rel);
+    osc.connect(lp); lp.connect(g); g.connect(master);
+    osc.start(when); osc.stop(when+atk+hold+rel+0.05);
+  }
+
+  // Beat counter across whole sequence
+  let beatPos = 0;
+  let melStep = 0, counterStep = 0;
+
+  function scheduleAhead() {
+    if (!ac || !master) return;
+    const beat = 60/BPM;
+    const lookahead = 0.18;
+
+    while (nextTime < ac.currentTime + lookahead) {
+      const m = MEL[melStep % MEL.length];
+      const co = COUNTER[counterStep % COUNTER.length];
+      const [ms, md, mv] = m;
+      const [cs, cd, cv] = co;
+      const dur = md * beat;
+      const cdur = cd * beat;
+
+      // ── Main melody — warm sine with gentle shimmer ──
+      note(freq(ms+12), 'sine', mv*0.16, 0.018, dur*0.55, dur*0.55, nextTime, 1100, 4);
+      // Soft triangle doubling for warmth
+      note(freq(ms+12), 'triangle', mv*0.055, 0.025, dur*0.45, dur*0.50, nextTime, 700, 6);
+      // Octave-up shimmer on held notes
+      if (md >= 1.5)
+        note(freq(ms+24), 'sine', mv*0.038, 0.035, dur*0.40, dur*0.60, nextTime, 1400, 3);
+
+      // ── Counter-melody — softer, lower ──
+      note(freq(cs+12), 'sine', cv*0.14, 0.022, cdur*0.50, cdur*0.55, nextTime, 750, 5);
+
+      // ── Bass arpeggios — one note per beat, very soft ──
+      const barp = BASS_ARPS[Math.floor(beatPos) % 4];
+      const bf = freq(barp[0] - 12);
+      note(bf, 'sine', 0.055, 0.018, beat*0.45, beat*0.45, nextTime, 480, 3);
+      // Add a soft fifth above
+      if (Math.floor(beatPos) % 2 === 0)
+        note(freq(barp[0] - 5), 'sine', 0.030, 0.030, beat*0.60, beat*0.50, nextTime+beat*0.5, 550, 3);
+
+      // ── Celeste sparkle — tiny high bell on phrase starts ──
+      if (melStep % 16 === 0) {
+        [0,4,7,12].forEach((s,i) =>
+          note(freq(s+24), 'sine', 0.028, 0.008, 0.12, 0.40, nextTime+i*0.07, 1800, 2));
+      }
+
+      nextTime += dur;
+      beatPos  += md;
+      melStep     = (melStep+1) % MEL.length;
+      counterStep = (counterStep+1) % COUNTER.length;
+    }
+    seq = setTimeout(scheduleAhead, 60);
+  }
+
+  // Create AudioContext immediately — it starts suspended but notes can be pre-scheduled
+  ac = new (window.AudioContext || window.webkitAudioContext)();
+  master = ac.createGain();
+  master.gain.setValueAtTime(0, ac.currentTime);
+  master.gain.linearRampToValueAtTime(0.42, ac.currentTime + 2.5);
+  const rev = makeReverb(ac);
+  const revGain = ac.createGain(); revGain.gain.value = 0.38;
+  master.connect(revGain); revGain.connect(rev); rev.connect(ac.destination);
+  master.connect(ac.destination);
+
+  // Pre-schedule notes from time 0 — will play immediately when context resumes
+  nextTime = 0.05;
+  beatPos = 0; melStep = 0; counterStep = 0;
+  scheduleAhead();
+
+  // Resume on any user gesture — notes play right away since they're pre-scheduled
+  function resumeOnGesture() {
+    if (ac.state === 'suspended') ac.resume();
+    document.removeEventListener('pointerdown', resumeOnGesture, true);
+    document.removeEventListener('keydown',     resumeOnGesture, true);
+    document.removeEventListener('touchstart',  resumeOnGesture, true);
+  }
+  document.addEventListener('pointerdown', resumeOnGesture, true);
+  document.addEventListener('keydown',     resumeOnGesture, true);
+  document.addEventListener('touchstart',  resumeOnGesture, true);
+
+  function start() {
+    // Already running — just ensure resumed
+    if (ac && ac.state === 'suspended') ac.resume();
+  }
+
+  function stop() {
+    if (seq) { clearTimeout(seq); seq = null; }
+    if (master && ac) {
+      const now = ac.currentTime;
+      master.gain.cancelScheduledValues(now);
+      master.gain.setValueAtTime(master.gain.value, now);
+      master.gain.linearRampToValueAtTime(0, now + 1.2);
+    }
+  }
+
+  return { start, stop };
+})();
+
+// Defer first load until layout is complete
+requestAnimationFrame(()=>requestAnimationFrame(()=>{
+  loadLevel(0);
+  // idle loop — keeps tongues flickering and patrols moving
+  let lastIdle = null;
+  function idleLoop(ts){
+    if(!animating){
+      const dt = lastIdle ? Math.min((ts-lastIdle)/1000, 0.1) : 0;
+      const hasPatrols = STONES.some(s=>s.patrol) || BUNNIES.some(b=>b.patrol&&!b.eaten);
+      if(hasPatrols) updatePatrols(dt);
+      updateObsAnims(dt);
+      render();
+    }
+    lastIdle = ts;
+    requestAnimationFrame(idleLoop);
+  }
+  requestAnimationFrame(idleLoop);
+
+  // ── Welcome screen animation ──
+  const wc = document.getElementById('welcome-canvas');
+  const wctx = wc.getContext('2d');
+  const W = wc.width, H = wc.height;
+  const CX = W/2, CY = H/2;
+
+  // ── tiny self-contained draw helpers that only use wctx ──
+  function wStone(c, ox, oy, sz) {
+    const rad = sz * 0.36;
+    const pts = [[.00,-.95],[.45,-.72],[.90,-.30],[.95,.20],[.60,.75],[.05,.90],[-.55,.80],[-.90,.18],[-.70,-.55],[-.30,-.88]]
+      .map(([px,py])=>[ox+px*rad, oy+py*rad]);
+    c.save();
+    c.beginPath(); pts.forEach(([x,y],i)=>i===0?c.moveTo(x+2,y+3):c.lineTo(x+2,y+3));
+    c.closePath(); c.fillStyle='rgba(0,0,0,.2)'; c.fill();
+    c.beginPath(); pts.forEach(([x,y],i)=>i===0?c.moveTo(x,y):c.lineTo(x,y));
+    c.closePath();
+    const g=c.createRadialGradient(ox-rad*.22,oy-rad*.28,rad*.05,ox+rad*.1,oy+rad*.1,rad*1.1);
+    g.addColorStop(0,'#d4d0cc');g.addColorStop(.35,'#9e9b96');g.addColorStop(.72,'#6e6b66');g.addColorStop(1,'#45433f');
+    c.fillStyle=g;c.fill();
+    c.strokeStyle='rgba(0,0,0,.3)';c.lineWidth=1;c.lineJoin='round';c.stroke();
+    c.beginPath();c.moveTo(ox-rad*.05,oy-rad*.85);c.lineTo(ox+rad*.38,oy-rad*.55);c.lineTo(ox+rad*.18,oy-rad*.10);c.lineTo(ox-rad*.32,oy-rad*.22);c.closePath();
+    c.fillStyle='rgba(255,255,255,.18)';c.fill();
+    c.restore();
+  }
+
+  function wMushroom(c, ox, oy, sz) {
+    const capR=sz*.34, stemW=sz*.17, capY=oy-sz*.06;
+    const stemTop=capY+capR*.55, stemBot=oy+sz*.38;
+    c.save();
+    const sg=c.createLinearGradient(ox-stemW,0,ox+stemW,0);
+    sg.addColorStop(0,'#c8b89a');sg.addColorStop(.5,'#f0e6d0');sg.addColorStop(1,'#b8a484');
+    c.fillStyle=sg;
+    c.beginPath();c.moveTo(ox-stemW,stemBot-4);c.arcTo(ox-stemW,stemBot,ox+stemW,stemBot,4);
+    c.arcTo(ox+stemW,stemBot,ox+stemW,stemTop,4);c.lineTo(ox+stemW,stemTop);c.lineTo(ox-stemW,stemTop);c.closePath();c.fill();
+    c.beginPath();c.arc(ox,capY,capR,Math.PI,0);
+    c.lineTo(ox+capR,capY+capR*.38);c.quadraticCurveTo(ox,capY+capR*.6,ox-capR,capY+capR*.38);c.closePath();
+    const cg=c.createRadialGradient(ox-capR*.2,capY-capR*.3,capR*.05,ox,capY,capR*1.1);
+    cg.addColorStop(0,'#ff6b6b');cg.addColorStop(.4,'#e53935');cg.addColorStop(1,'#b71c1c');
+    c.fillStyle=cg;c.fill();c.strokeStyle='rgba(0,0,0,.2)';c.lineWidth=1;c.stroke();
+    for(const[sx,sy,sr] of [[-capR*.42,-capR*.28,capR*.13],[capR*.40,-capR*.25,capR*.12],[capR*.05,-capR*.58,capR*.10]]){
+      c.beginPath();c.arc(ox+sx,capY+sy,sr,0,Math.PI*2);c.fillStyle='rgba(255,255,255,.9)';c.fill();
+    }
+    c.restore();
+  }
+
+  function wTunnel(c, ox, oy, sz, col, phase) {
+    const rad = sz * 0.36;
+    const r = parseInt(col.slice(1,3),16), g2 = parseInt(col.slice(3,5),16), b = parseInt(col.slice(5,7),16);
+    c.save();
+
+    // Expanding pulse ring
+    const pulse = (phase * 0.5) % 1;
+    const ringR = rad + pulse * rad * 0.9;
+    c.beginPath(); c.arc(ox, oy, ringR, 0, Math.PI*2);
+    c.strokeStyle = `rgba(${r},${g2},${b},${(1-pulse)*0.6})`; c.lineWidth=4; c.stroke();
+
+    // Outer glow
+    c.beginPath(); c.arc(ox, oy, rad, 0, Math.PI*2);
+    c.strokeStyle = `rgba(${r},${g2},${b},${0.25+0.2*Math.sin(phase*2.3)})`; c.lineWidth=8; c.stroke();
+
+    // Colored rim
+    c.beginPath(); c.arc(ox, oy, rad, 0, Math.PI*2);
+    c.strokeStyle = col; c.lineWidth=3.5; c.stroke();
+
+    // Dark void fill
+    c.beginPath(); c.arc(ox, oy, rad-3, 0, Math.PI*2);
+    c.fillStyle = '#0a0a0f'; c.fill();
+
+    // Depth gradient
+    const dg = c.createRadialGradient(ox, oy, 0, ox, oy, rad-3);
+    dg.addColorStop(0,   'rgba(0,0,0,1)');
+    dg.addColorStop(0.55,'rgba(0,0,0,0.85)');
+    dg.addColorStop(0.82,'rgba(40,40,60,0.6)');
+    dg.addColorStop(1,   'rgba(80,80,110,0)');
+    c.beginPath(); c.arc(ox, oy, rad-3, 0, Math.PI*2); c.fillStyle=dg; c.fill();
+
+    // Colored tint at bottom
+    const tg = c.createRadialGradient(ox, oy+rad*.3, 0, ox, oy+rad*.3, rad*.55);
+    tg.addColorStop(0, `rgba(${r},${g2},${b},0.18)`); tg.addColorStop(1, `rgba(${r},${g2},${b},0)`);
+    c.beginPath(); c.arc(ox, oy, rad-3, 0, Math.PI*2); c.fillStyle=tg; c.fill();
+
+    // Highlight crescent
+    c.beginPath(); c.arc(ox, oy, rad-3, Math.PI*1.1, Math.PI*1.9);
+    c.strokeStyle='rgba(255,255,255,0.12)'; c.lineWidth=3; c.stroke();
+
+    c.restore();
+  }
+
+  function wNavigator(c, ox, oy, sz, angle) {
+    const half = sz * 0.40;
+    const x1=ox+Math.cos(angle)*half, y1=oy+Math.sin(angle)*half;
+    const x2=ox-Math.cos(angle)*half, y2=oy-Math.sin(angle)*half;
+    c.save();
+    c.shadowColor='rgba(56,189,248,0.9)';c.shadowBlur=10;
+    c.beginPath();c.moveTo(x1,y1);c.lineTo(x2,y2);c.strokeStyle='#38bdf8';c.lineWidth=4;c.lineCap='round';c.stroke();
+    c.shadowBlur=0;
+    c.beginPath();c.moveTo(x1,y1);c.lineTo(x2,y2);c.strokeStyle='#e0f7ff';c.lineWidth=1.5;c.stroke();
+    c.fillStyle='#7dd3fc';
+    c.beginPath();c.arc(x1,y1,3,0,Math.PI*2);c.fill();
+    c.beginPath();c.arc(x2,y2,3,0,Math.PI*2);c.fill();
+    c.restore();
+  }
+
+  function wBunny(c, ox, oy, sz, earWiggle) {
+    const sc=sz*0.18, wv=Math.sin(earWiggle)*0.45;
+    c.save();
+    c.beginPath();c.ellipse(ox,oy+sc*2.2,sc*1.4,sc*.4,0,0,Math.PI*2);c.fillStyle='rgba(0,0,0,.12)';c.fill();
+    c.beginPath();c.ellipse(ox,oy+sc*.8,sc*1.15,sc*1,0,0,Math.PI*2);c.fillStyle='#fff';c.fill();
+    c.beginPath();c.ellipse(ox,oy-sc*.7,sc*.88,sc*.85,0,0,Math.PI*2);c.fillStyle='#fff';c.fill();
+    for(const[side,ex]of[[-1,-sc*.45],[1,sc*.45]]){
+      const ea=(ex<0?-.15:.15)+wv*side;
+      c.beginPath();c.ellipse(ox+ex,oy-sc*2,sc*.24,sc*.76,ea,0,Math.PI*2);c.fillStyle='#f0eded';c.fill();
+      c.beginPath();c.ellipse(ox+ex,oy-sc*2,sc*.12,sc*.50,ea,0,Math.PI*2);c.fillStyle='#f9a8d4';c.fill();
+    }
+    for(const ex of[-sc*.33,sc*.33]){
+      c.beginPath();c.ellipse(ox+ex,oy-sc*.82,sc*.20,sc*.23,0,0,Math.PI*2);c.fillStyle='#fff';c.fill();
+      c.beginPath();c.ellipse(ox+ex,oy-sc*.82,sc*.17,sc*.20,0,0,Math.PI*2);c.fillStyle='#1a1a2e';c.fill();
+      c.beginPath();c.arc(ox+ex+sc*.07,oy-sc*.94,sc*.09,0,Math.PI*2);c.fillStyle='#fff';c.fill();
+    }
+    for(const ex of[-sc*.58,sc*.58]){
+      const cg=c.createRadialGradient(ox+ex,oy-sc*.5,0,ox+ex,oy-sc*.5,sc*.32);
+      cg.addColorStop(0,'rgba(255,140,170,.65)');cg.addColorStop(1,'rgba(255,140,170,0)');
+      c.beginPath();c.ellipse(ox+ex,oy-sc*.5,sc*.32,sc*.20,0,0,Math.PI*2);c.fillStyle=cg;c.fill();
+    }
+    c.beginPath();c.arc(ox,oy-sc*.56,sc*.11,0,Math.PI*2);c.fillStyle='#f472b6';c.fill();
+    c.beginPath();c.arc(ox,oy-sc*.38,sc*.22,.25,Math.PI-.25);
+    c.strokeStyle='rgba(210,100,140,.75)';c.lineWidth=sc*.16;c.lineCap='round';c.stroke();
+    c.beginPath();c.arc(ox+sc,oy+sc*.6,sc*.30,0,Math.PI*2);c.fillStyle='#f5f5f5';c.fill();
+    c.restore();
+  }
+
+  function drawWelcome(ts) {
+    const t = ts / 1000;
+    wctx.clearRect(0, 0, W, H);
+
+    // ── Background ──
+    wctx.fillStyle = '#5cb83a';
+    wctx.beginPath(); wctx.roundRect(0,0,W,H,24); wctx.fill();
+    const bgGrad = wctx.createLinearGradient(0,0,W,H);
+    bgGrad.addColorStop(0,'rgba(200,240,100,.13)'); bgGrad.addColorStop(1,'rgba(0,50,0,.16)');
+    wctx.fillStyle=bgGrad; wctx.fillRect(0,0,W,H);
+    // vignette
+    const vig=wctx.createRadialGradient(CX,CY,60,CX,CY,160);
+    vig.addColorStop(0,'rgba(0,0,0,0)'); vig.addColorStop(1,'rgba(0,30,0,.18)');
+    wctx.fillStyle=vig; wctx.fillRect(0,0,W,H);
+
+    // ── 6 obstacles in a ring ──
+    const OBS = [
+      { label:'stone',     angle: Math.PI*0.05  },
+      { label:'mushroom',  angle: Math.PI*0.38  },
+      { label:'tunnel',    angle: Math.PI*0.72  },
+      { label:'navigator', angle: Math.PI*1.05  },
+      { label:'bunny',     angle: Math.PI*1.38  },
+      { label:'patrol',    angle: Math.PI*1.72  },
+    ];
+    const RING_R = 106;
+
+    for (const obs of OBS) {
+      const floatA = obs.angle + Math.sin(t * 0.5 + obs.angle) * 0.04;
+      const ox = CX + Math.cos(floatA) * RING_R;
+      const oy = CY + Math.sin(floatA) * RING_R;
+      const bob = Math.sin(t * 1.6 + obs.angle * 2.5) * 4;
+      const SZ = 44;
+
+      wctx.save();
+      wctx.translate(ox, oy + bob);
+
+      if (obs.label === 'stone') {
+        wctx.rotate(Math.sin(t * 2.0 + 0.5) * 0.07);
+        wStone(wctx, 0, 0, SZ);
+      }
+      else if (obs.label === 'mushroom') {
+        const beat = (Math.sin(t * 2.8) + 1) / 2;
+        wctx.scale(1 + beat * 0.06, 1 - beat * 0.09);
+        wMushroom(wctx, 0, 0, SZ);
+      }
+      else if (obs.label === 'tunnel') {
+        wTunnel(wctx, 0, 0, SZ, '#f59e0b', t);
+      }
+      else if (obs.label === 'navigator') {
+        wNavigator(wctx, 0, 0, SZ, t * 0.55 + Math.PI/4);
+      }
+      else if (obs.label === 'bunny') {
+        wBunny(wctx, 0, 0, SZ, t * 3.5 + obs.angle);
+      }
+      else if (obs.label === 'patrol') {
+        const px = Math.sin(t * 1.3) * 16;
+        // dashed trail first (behind stone)
+        wctx.setLineDash([3,4]);
+        wctx.strokeStyle='rgba(255,255,255,0.28)'; wctx.lineWidth=1.5;
+        wctx.beginPath(); wctx.moveTo(-22, SZ*0.35); wctx.lineTo(22, SZ*0.35); wctx.stroke();
+        wctx.setLineDash([]);
+        // end dots
+        for(const ex of [-22,22]){
+          wctx.beginPath(); wctx.arc(ex, SZ*0.35, 3, 0, Math.PI*2);
+          wctx.fillStyle='rgba(255,255,255,0.4)'; wctx.fill();
+        }
+        wctx.save(); wctx.translate(px, 0); wStone(wctx, 0, 0, SZ*0.85); wctx.restore();
+      }
+
+      wctx.restore();
+    }
+
+    // ── Central snake — S-curve that breathes ──
+    const breathe = Math.sin(t * 1.3) * 4;
+    const snakeColor = '#f472b6';
+    // Control points for a nice S shape
+    const sp = [
+      [CX+28,  CY-62+breathe],
+      [CX+28,  CY-38+breathe],
+      [CX-14,  CY-16+breathe*.5],
+      [CX+14,  CY+8+breathe*.5],
+      [CX-20,  CY+32],
+      [CX-20,  CY+58],
+    ];
+
+    // Body
+    wctx.save();
+    wctx.beginPath();
+    wctx.moveTo(sp[0][0], sp[0][1]);
+    for(let i=1;i<sp.length;i++){
+      const [ax,ay]=sp[i-1],[bx,by]=sp[i];
+      if(i===sp.length-1) wctx.lineTo(bx,by);
+      else wctx.quadraticCurveTo(ax,ay,(ax+bx)/2,(ay+by)/2);
+    }
+    wctx.strokeStyle=snakeColor; wctx.lineWidth=28; wctx.lineCap='round'; wctx.lineJoin='round'; wctx.stroke();
+    wctx.strokeStyle='rgba(255,255,255,0.2)'; wctx.lineWidth=9; wctx.stroke();
+
+    // Tail nub
+    const [tx,ty]=sp[sp.length-1];
+    wctx.beginPath(); wctx.arc(tx,ty,8,0,Math.PI*2); wctx.fillStyle=snakeColor; wctx.fill();
+
+    // Head
+    const [hx,hy]=sp[0];
+    const headAng = Math.atan2(sp[0][1]-sp[1][1], sp[0][0]-sp[1][0]);
+    wctx.save();
+    wctx.translate(hx,hy); wctx.rotate(headAng);
+    wctx.beginPath(); wctx.arc(0,0,15,0,Math.PI*2); wctx.fillStyle=snakeColor; wctx.fill();
+    // head shade
+    const hg=wctx.createLinearGradient(-15,0,15,0);
+    hg.addColorStop(0,'rgba(0,0,0,0)'); hg.addColorStop(1,'rgba(0,0,0,0.18)');
+    wctx.fillStyle=hg; wctx.beginPath(); wctx.arc(0,0,15,0,Math.PI*2); wctx.fill();
+    // eyes
+    for(const ey of[-5.5,5.5]){
+      wctx.beginPath();wctx.arc(7,ey,4.2,0,Math.PI*2);wctx.fillStyle='#fff';wctx.fill();
+      wctx.beginPath();wctx.arc(8,ey,2.2,0,Math.PI*2);wctx.fillStyle='#111';wctx.fill();
+      wctx.beginPath();wctx.arc(8.8,ey-1.2,0.9,0,Math.PI*2);wctx.fillStyle='#fff';wctx.fill();
+    }
+    // tongue
+    if(Math.sin(t*4.2)>0.2){
+      wctx.strokeStyle='#ff4d6d';wctx.lineWidth=2.2;wctx.lineCap='round';
+      wctx.beginPath();wctx.moveTo(15,0);wctx.lineTo(22,0);wctx.stroke();
+      wctx.beginPath();wctx.moveTo(22,0);wctx.lineTo(27,-4);wctx.stroke();
+      wctx.beginPath();wctx.moveTo(22,0);wctx.lineTo(27,4);wctx.stroke();
+    }
+    wctx.restore();
+    wctx.restore();
+
+    // ── Floating sparkles ──
+    for(let i=0;i<8;i++){
+      const sa=(t*0.65+i*0.785)%(Math.PI*2);
+      const sr=126+Math.sin(t*1.2+i*0.9)*10;
+      const sx=CX+Math.cos(sa)*sr, sy=CY+Math.sin(sa)*sr;
+      const alpha=0.35+0.3*Math.sin(t*2.1+i*1.4);
+      const sparkR=1.8+Math.sin(t*3+i)*0.8;
+      wctx.beginPath();wctx.arc(sx,sy,sparkR,0,Math.PI*2);
+      wctx.fillStyle=`rgba(255,252,180,${alpha})`;wctx.fill();
+    }
+  }
+
+  let welcomeRunning = true;
+  function welcomeLoop(ts) {
+    if (!welcomeRunning) return;
+    drawWelcome(ts);
+    requestAnimationFrame(welcomeLoop);
+  }
+  requestAnimationFrame(welcomeLoop);
+
+  const welcomeEl = document.getElementById('welcome-screen');
+  const btnStart  = document.getElementById('btn-start');
+
+  btnStart.addEventListener('click', () => {
+    welcomeEl.classList.add('hide');
+    welcomeRunning = false;
+    WelcomeMusic.stop();
+    Music.unlock();
+  });
+}));
+
+</script>
+</body>
+</html>
