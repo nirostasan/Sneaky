@@ -245,9 +245,9 @@
 </div>
 
 <div class="overlay" id="ov-win">
-  <div class="ov-icon">🎉</div>
+  <canvas id="win-canvas" width="200" height="120" style="border-radius:20px; animation: popIn .4s cubic-bezier(.36,.07,.19,.97) both;"></canvas>
   <div class="ov-title">Cleared!</div>
-  <div class="ov-sub" id="ov-win-sub">All snakes released!</div>
+  <div class="ov-sub" id="ov-win-sub">All Sneakies released!</div>
   <button class="ov-btn btn-win" id="btn-next">Next Level →</button>
 </div>
 <div class="overlay" id="ov-lose">
@@ -1816,9 +1816,9 @@ function loadLevel(idx) {
 
   updateHearts(); updateLevelNav(); fitCanvas(); render();
 
-  // Show snake intro on very first play (level 1, never seen)
+  // Show intro cards on very first play (level 1, never seen)
   if(idx === 0 && !seenObstacles.has('snake_intro')){
-    enqueueObstacleInfo(['snake_intro'], null);
+    enqueueObstacleInfo(['snake_intro', 'snake_goal', 'snake_collision'], null);
     return;
   }
 
@@ -3084,7 +3084,7 @@ function checkWin(){
     Music.stop();
     Music.playSfx('win');
     document.getElementById('ov-win-sub').textContent=
-      levelIdx<LEVELS.length-1?'All snakes freed! ✨':'All levels complete! 🏆';
+      levelIdx<LEVELS.length-1?'All Sneakies freed! ✨':'All levels complete! 🏆';
     showOverlay('win');
   },400);
   else if(allSnakesGone && !allBunniesEaten){
@@ -3095,10 +3095,82 @@ function checkWin(){
 function showOverlay(w){
   document.getElementById('ov-win').classList.toggle('show',w==='win');
   document.getElementById('ov-lose').classList.toggle('show',w==='lose');
+  if(w==='win') startWinAnim();
 }
 function hideOverlays(){
   document.getElementById('ov-win').classList.remove('show');
   document.getElementById('ov-lose').classList.remove('show');
+  stopWinAnim();
+}
+
+// ── Win screen animation ──────────────────────────────────────────────────────
+let _winAnimId = null;
+function stopWinAnim(){ if(_winAnimId){ cancelAnimationFrame(_winAnimId); _winAnimId=null; } }
+function startWinAnim(){
+  stopWinAnim();
+  const wc = document.getElementById('win-canvas');
+  if(!wc) return;
+  const ctx = wc.getContext('2d');
+  const W=wc.width, H=wc.height;
+  // Five snakes (using game's colour palette) each on their own lane, all sliding right
+  const SNAKES = [
+    { color:'#f472b6', len:4, lane:0.18, speed:0.28, phase:0.00 },
+    { color:'#60a5fa', len:5, lane:0.36, speed:0.22, phase:0.18 },
+    { color:'#4ade80', len:4, lane:0.54, speed:0.32, phase:0.38 },
+    { color:'#fbbf24', len:3, lane:0.72, speed:0.20, phase:0.55 },
+    { color:'#a78bfa', len:5, lane:0.90, speed:0.26, phase:0.75 },
+  ];
+  // Confetti particles
+  const CONF = Array.from({length:22}, (_,i) => ({
+    x: Math.random()*W, y: Math.random()*H*0.6,
+    vx: (Math.random()-0.5)*18,
+    vy: -8 - Math.random()*14,
+    color: ['#f472b6','#60a5fa','#4ade80','#fbbf24','#a78bfa','#fb923c','#f87171'][i%7],
+    r: 2.5+Math.random()*2.5,
+    rot: Math.random()*Math.PI*2,
+    rspd: (Math.random()-0.5)*6,
+    w: 5+Math.random()*4, h: 3+Math.random()*2,
+  }));
+  let t0 = null;
+
+  function frame(ts){
+    _winAnimId = requestAnimationFrame(frame);
+    if(!t0) t0=ts;
+    const t = (ts-t0)/1000;
+    const dt = Math.min(t - (frame._last||0), 0.05);
+    frame._last = t;
+
+    // Background — soft gradient matching overlay bg
+    const bg = ctx.createLinearGradient(0,0,W,H);
+    bg.addColorStop(0,'rgba(168,224,99,0.0)');
+    bg.addColorStop(1,'rgba(100,180,50,0.0)');
+    ctx.clearRect(0,0,W,H);
+
+    // Confetti
+    for(const p of CONF){
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 18*dt; p.rot += p.rspd*dt;
+      if(p.y > H+10){ p.y=-10; p.x=Math.random()*W; p.vy=-8-Math.random()*12; }
+      ctx.save();
+      ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.fillStyle=p.color; ctx.globalAlpha=0.85;
+      ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
+      ctx.restore();
+    }
+
+    // Snakes — each loops across the canvas
+    for(const sn of SNAKES){
+      const laneY = H * sn.lane;
+      // Position: starts off left, slides right, wraps
+      const period = W + sn.len*17 + 20;
+      const offset = ((t * sn.speed * W + sn.phase * period) % period);
+      const headX = -sn.len*17 + offset;
+      // Only draw if at least partially on screen
+      if(headX > -sn.len*17-10 && headX < W+20){
+        drawMiniSnake(ctx, headX, laneY, sn.len, 'R', sn.color);
+      }
+    }
+  }
+  requestAnimationFrame(frame);
 }
 
 // ─── INPUT ───
@@ -3164,9 +3236,21 @@ canvas.addEventListener('pointerleave',()=>{if(hovered){hovered=null;render();}}
 const OBSTACLE_INFO = {
   snake_intro: {
     name: 'Meet Sneaky!',
-    desc: 'Tap a snake\'s head to send it sliding in that direction.\nSome snakes have two heads — you choose which way to go!',
+    desc: 'Tap a Sneaky\'s head to send it sliding in that direction.\nSome Sneakies have two heads — you choose which way to go!',
     color: '#4ade80',
     btnColor: '#16a34a',
+  },
+  snake_goal: {
+    name: 'The Goal',
+    desc: 'Release every Sneaky off the edge of the board to clear the level!\nThey vanish once they cross the border.',
+    color: '#60a5fa',
+    btnColor: '#2563eb',
+  },
+  snake_collision: {
+    name: 'Watch Out!',
+    desc: 'A Sneaky cannot crash into another Sneaky — that costs a heart!\nBut a Sneaky can coil through its own body just fine.',
+    color: '#f87171',
+    btnColor: '#dc2626',
   },
   patrol_stone: {
     name: 'Patrol Stone',
@@ -3234,7 +3318,7 @@ function showNextInfo() {
   seenObstacles.add(type);
 
   const badge = document.getElementById('info-badge');
-  if(type === 'snake_intro'){
+  if(type === 'snake_intro' || type === 'snake_goal' || type === 'snake_collision'){
     badge.textContent = 'How to play';
     badge.className = 'info-badge new';
   } else {
@@ -3515,7 +3599,125 @@ function drawInfoIllustration(c, W, H, type){
       drawMiniSnake(c, headX - (1-p)*30, sy, len, 'R', color, p);
     }
   }
+
+  else if(type==='snake_goal'){
+    const loop = (t % 3.5) / 3.5;
+    const borderX = W - 18;
+
+    // Solid black border line
+    c.save();
+    c.strokeStyle = 'rgba(0,0,0,0.75)'; c.lineWidth = 3; c.lineCap = 'square';
+    c.beginPath(); c.moveTo(borderX, 4); c.lineTo(borderX, H-4); c.stroke();
+    c.restore();
+    // "OUT" label beyond border
+    c.save(); c.globalAlpha=0.45;
+    c.font='bold 9px sans-serif'; c.fillStyle='#fff'; c.textAlign='center';
+    c.fillText('OUT', borderX+9, H/2+3);
+    c.restore();
+
+    // Three snakes on three lanes, each offset in phase
+    const lanes = [
+      { color:'#4ade80', phase:0.00, len:4, lane:0.28 },
+      { color:'#f472b6', phase:0.33, len:3, lane:0.55 },
+      { color:'#60a5fa', phase:0.66, len:4, lane:0.82 },
+    ];
+    for(const sn of lanes){
+      const laneY = H * sn.lane;
+      const p = ((loop + 1 - sn.phase) % 1);
+      const startX = 14 + sn.len*17;
+      const endX   = borderX + sn.len*17 + 24;
+      const headX  = startX + p * (endX - startX);
+      const alpha  = headX > borderX + 10 ? Math.max(0, 1-(headX-borderX-10)/30) : 1;
+      drawMiniSnake(c, headX, laneY, sn.len, 'R', sn.color, alpha);
+      if(headX > borderX - 4 && headX < borderX + 22){
+        const f = Math.sin((headX - borderX + 4) / 26 * Math.PI);
+        c.save(); c.globalAlpha = f * 0.9;
+        c.font = '13px sans-serif'; c.textAlign='center';
+        c.fillText('✨', borderX + 2, laneY - 12);
+        c.restore();
+      }
+    }
+  }
+
+  else if(type==='snake_collision'){
+    const loop = (t % 3.0) / 3.0;
+
+    // ── Top scene: two Sneakies crash head-on ──
+    // Pink fires R (head points right, body extends left)
+    // Blue fires L (head points left, body extends right)
+    const topY = H * 0.30;
+    const midX = cx;
+
+    if(loop < 0.42){
+      const p = loop / 0.42;
+      const gap = 10 + (1-p) * 48;
+      // Pink: head at (midX-gap), fires R — approaches from left
+      drawMiniSnake(c, midX - gap, topY, 3, 'R', '#f472b6');
+      // Blue: head at (midX+gap), fires L — approaches from right
+      drawMiniSnake(c, midX + gap, topY, 3, 'L', '#60a5fa');
+      drawArrow2(c, midX - gap - 28, topY, midX - gap - 8, topY, 'rgba(255,255,255,0.6)');
+      drawArrow2(c, midX + gap + 28, topY, midX + gap + 8, topY, 'rgba(255,255,255,0.6)');
+    } else if(loop < 0.62){
+      const f = Math.sin((loop-0.42)/0.20 * Math.PI);
+      drawMiniSnake(c, midX - 8, topY, 3, 'R', '#f472b6', 0.5);
+      drawMiniSnake(c, midX + 8, topY, 3, 'L', '#60a5fa', 0.5);
+      c.save(); c.globalAlpha = f;
+      c.font = '20px sans-serif'; c.textAlign='center';
+      c.fillText('💥', midX, topY + 6);
+      c.restore();
+    } else {
+      drawMiniSnake(c, midX - 22, topY, 3, 'R', '#f472b6', 0.7);
+      drawMiniSnake(c, midX + 22, topY, 3, 'L', '#60a5fa', 0.7);
+    }
+
+    // Divider
+    c.save(); c.globalAlpha=0.25;
+    c.setLineDash([4,4]); c.strokeStyle='#fff'; c.lineWidth=1;
+    c.beginPath(); c.moveTo(14, H*0.51); c.lineTo(W-14, H*0.51); c.stroke();
+    c.setLineDash([]);
+    c.restore();
+
+    // ── Bottom scene: α-shaped self-coil is OK ──
+    // Snake body forms a rectangular loop then head passes back through the middle
+    const botY = H * 0.76;
+    const color = '#4ade80';
+    const bx = cx - 30;
+    const loopW = 54, loopH = 20;
+    // Body path: tail(bottom-left) → right → up → left → midpoint-left → head pokes through
+    const bodyPts = [
+      [bx,              botY         ],  // tail
+      [bx + loopW,      botY         ],  // bottom-right
+      [bx + loopW,      botY - loopH ],  // top-right
+      [bx,              botY - loopH ],  // top-left
+      [bx,              botY - loopH/2], // mid-left (where body crosses itself)
+      [bx + loopW*0.55, botY - loopH/2],// head — inside the loop
+    ];
+
+    // Draw body (tail first so head renders on top)
+    c.save();
+    c.beginPath();
+    c.moveTo(bodyPts[0][0], bodyPts[0][1]);
+    for(let i=1;i<bodyPts.length;i++) c.lineTo(bodyPts[i][0], bodyPts[i][1]);
+    c.strokeStyle=color; c.lineWidth=11; c.lineCap='round'; c.lineJoin='round'; c.stroke();
+    c.strokeStyle='rgba(255,255,255,0.2)'; c.lineWidth=4; c.stroke();
+    // Head circle
+    const [hx,hy] = bodyPts[bodyPts.length-1];
+    c.beginPath(); c.arc(hx, hy, 6.5, 0, Math.PI*2); c.fillStyle=color; c.fill();
+    // Eyes (head fires R)
+    for(const s of [-1,1]){
+      c.beginPath(); c.arc(hx+3, hy+s*3, 1.6, 0, Math.PI*2); c.fillStyle='#111'; c.fill();
+    }
+    c.restore();
+
+    // ✓ OK label
+    const okAlpha = 0.65 + 0.35*Math.sin(t*2.5);
+    c.save(); c.globalAlpha=okAlpha;
+    c.font='bold 11px sans-serif'; c.fillStyle='#86efac'; c.textAlign='center';
+    c.fillText('\u2713 OK', cx + 42, botY - loopH/2 + 4);
+    c.restore();
+  }
 }
+
 
 function drawStonePreview(ictx, ox, oy, cellSize) {
   const rad = cellSize * 0.36;
