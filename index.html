@@ -63,8 +63,6 @@
     filter: drop-shadow(0 8px 24px rgba(45,90,27,.35));
   }
   canvas#maze { display: block; border-radius: 20px; cursor: pointer; touch-action: none; }
-  #hint { margin-top: 14px; font-size: 13px; font-weight: 800; color: #3a7d1e;
-          text-shadow: 0 1px 0 rgba(255,255,255,.4); }
 
   .overlay {
     position: fixed; inset: 0; display: flex; flex-direction: column;
@@ -169,6 +167,51 @@
     transition: transform .12s, box-shadow .12s;
   }
   #btn-start:active { transform: scale(.93); box-shadow: 0 2px 8px rgba(255,159,67,.4); }
+  #btn-restart-fresh {
+    padding: 11px 32px; border-radius: 50px; border: 2px solid rgba(255,255,255,.55);
+    font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 700;
+    background: transparent; color: rgba(255,255,255,.9); cursor: pointer; letter-spacing: .03em;
+    transition: transform .12s, background .15s;
+  }
+  #btn-restart-fresh:active { transform: scale(.93); background: rgba(255,255,255,.12); }
+  #welcome-progress {
+    font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 700;
+    color: rgba(255,255,255,.75); letter-spacing: .02em; margin-top: -8px;
+  }
+  /* ── CONFIRM DIALOG ── */
+  #confirm-overlay {
+    position: fixed; inset: 0; z-index: 500;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.45); backdrop-filter: blur(4px);
+    opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  #confirm-overlay.show { opacity: 1; pointer-events: all; }
+  #confirm-box {
+    background: #fff; border-radius: 24px; padding: 32px 28px 24px;
+    max-width: 300px; width: 90%; text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,.3);
+    transform: scale(.9); transition: transform .2s;
+  }
+  #confirm-overlay.show #confirm-box { transform: scale(1); }
+  #confirm-box p {
+    font-family: 'Nunito', sans-serif; font-size: 16px; font-weight: 700;
+    color: #2d3a1e; line-height: 1.5; margin: 0 0 24px;
+  }
+  .confirm-btns { display: flex; gap: 12px; justify-content: center; }
+  #confirm-yes {
+    flex: 1; padding: 13px; border-radius: 50px; border: none;
+    font-family: 'Nunito', sans-serif; font-size: 16px; font-weight: 900;
+    background: #e05c3a; color: #fff; cursor: pointer;
+    transition: transform .12s;
+  }
+  #confirm-yes:active { transform: scale(.93); }
+  #confirm-cancel {
+    flex: 1; padding: 13px; border-radius: 50px; border: 2px solid #d0d8c8;
+    font-family: 'Nunito', sans-serif; font-size: 16px; font-weight: 900;
+    background: #fff; color: #5a6e4a; cursor: pointer;
+    transition: transform .12s;
+  }
+  #confirm-cancel:active { transform: scale(.93); }
 </style>
 </head>
 <body>
@@ -198,7 +241,7 @@
 
 <div id="stage">
   <div id="maze-wrap"><canvas id="maze"></canvas></div>
-  <div id="hint">Tap a snake to release it</div>
+
 </div>
 
 <div class="overlay" id="ov-win">
@@ -219,7 +262,20 @@
   <div id="welcome-inner">
     <h1 id="welcome-title">Sneaky</h1>
     <canvas id="welcome-canvas" width="300" height="300"></canvas>
+    <div id="welcome-progress" style="display:none"></div>
     <button id="btn-start">▶ Play</button>
+    <button id="btn-restart-fresh" style="display:none">Start from the Beginning</button>
+  </div>
+</div>
+
+<!-- Confirmation dialog -->
+<div id="confirm-overlay">
+  <div id="confirm-box">
+    <p>This will erase your progress and start from the beginning.</p>
+    <div class="confirm-btns">
+      <button id="confirm-yes">Yes, reset</button>
+      <button id="confirm-cancel">Cancel</button>
+    </div>
   </div>
 </div>
 
@@ -254,291 +310,1067 @@
 // Levels 13–16: tunnels
 // ─────────────────────────────────────────────
 const LEVELS = [
-  // ── TIER 1: NO OBSTACLES ─────────────────────
-  // Level 1 — 6×6, 3 snakes
-  { cols:6, rows:6,
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'],     cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R','D'], cells:[{r:2,c:5},{r:2,c:4},{r:2,c:3},{r:3,c:3}]},
-      {id:2,color:'#4ade80',dirs:['R'],     cells:[{r:4,c:5},{r:4,c:4},{r:4,c:3}]},
-    ]},
-  // Level 2 — 7×7, 4 snakes
-  { cols:7, rows:7,
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'],      cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R','U'],  cells:[{r:3,c:4},{r:3,c:3},{r:2,c:3},{r:1,c:3},{r:1,c:4},{r:1,c:5}]},
-      {id:2,color:'#fbbf24',dirs:['L'],      cells:[{r:5,c:2},{r:5,c:3},{r:5,c:4},{r:5,c:5},{r:5,c:6}]},
-      {id:3,color:'#4ade80',dirs:['U','L'],  cells:[{r:2,c:6},{r:3,c:6},{r:4,c:6},{r:4,c:5}]},
-    ]},
-  // Level 3 — 8×8, 5 snakes + diagonal
-  { cols:8, rows:8,
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1},{r:6,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:7},{r:1,c:6},{r:1,c:5},{r:1,c:4},{r:1,c:3}]},
-      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:7,c:7},{r:6,c:7},{r:5,c:7},{r:4,c:7},{r:3,c:7}]},
-      {id:3,color:'#4ade80',dirs:['L','R'],    cells:[{r:7,c:1},{r:7,c:2},{r:7,c:3},{r:7,c:4},{r:7,c:5}]},
-      {id:4,color:'#a78bfa',dirs:['UL','DR_'], cells:[{r:3,c:3},{r:4,c:4},{r:5,c:5},{r:6,c:6}]},
-    ]},
-  // Level 4 — 9×9, 6 snakes + diagonal
-  { cols:9, rows:9,
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1},{r:6,c:1},{r:7,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:8},{r:1,c:7},{r:1,c:6},{r:1,c:5},{r:1,c:4},{r:1,c:3}]},
-      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:8,c:8},{r:7,c:8},{r:6,c:8},{r:5,c:8},{r:4,c:8},{r:3,c:8}]},
-      {id:3,color:'#4ade80',dirs:['L','R'],    cells:[{r:8,c:1},{r:8,c:2},{r:8,c:3},{r:8,c:4},{r:8,c:5},{r:8,c:6}]},
-      {id:4,color:'#a78bfa',dirs:['UL','DR_'], cells:[{r:3,c:3},{r:4,c:4},{r:5,c:5},{r:6,c:6}]},
-      {id:5,color:'#fb923c',dirs:['R','R'],    cells:[{r:5,c:3},{r:5,c:2},{r:4,c:2},{r:3,c:2},{r:2,c:2},{r:2,c:3},{r:2,c:4}]},
-    ]},
 
-  // ── TIER 2: STONES ───────────────────────────
-  // Level 5 — 7×7, 4 snakes, 2 stones
-  { cols:7, rows:7,
-    stones:[{r:2,c:4},{r:4,c:2}],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'],     cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R'],     cells:[{r:3,c:5},{r:3,c:4},{r:3,c:3},{r:3,c:2}]},
-      {id:2,color:'#fbbf24',dirs:['D'],     cells:[{r:3,c:6},{r:2,c:6},{r:1,c:6},{r:1,c:5}]},
-      {id:3,color:'#4ade80',dirs:['L','R'], cells:[{r:5,c:3},{r:5,c:4},{r:5,c:5},{r:5,c:6}]},
-    ]},
-  // Level 6 — 8×8, 5 snakes, 3 stones
-  { cols:8, rows:8,
-    stones:[{r:2,c:4},{r:4,c:2},{r:4,c:6},{r:6,c:4}],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R','U'],    cells:[{r:3,c:6},{r:3,c:5},{r:2,c:5},{r:1,c:5},{r:1,c:6},{r:1,c:7}]},
-      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:4,c:7},{r:3,c:7},{r:2,c:7},{r:2,c:6}]},
-      {id:3,color:'#4ade80',dirs:['L','L'],    cells:[{r:6,c:1},{r:6,c:2},{r:6,c:3},{r:5,c:3},{r:5,c:2}]},
-      {id:4,color:'#a78bfa',dirs:['UL','DR_'], cells:[{r:5,c:5},{r:6,c:6},{r:7,c:7}]},
-    ]},
-  // Level 7 — 8×8, 5 snakes, 4 stones
-  { cols:8, rows:8,
-    stones:[{r:1,c:4},{r:4,c:1},{r:4,c:6},{r:6,c:3}],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:2,c:2},{r:3,c:2},{r:4,c:2},{r:5,c:2}]},
-      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:6},{r:1,c:5},{r:2,c:5},{r:2,c:4},{r:2,c:3}]},
-      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:3,c:7},{r:2,c:7},{r:1,c:7},{r:2,c:6}]},
-      {id:3,color:'#4ade80',dirs:['L'],        cells:[{r:6,c:2},{r:7,c:2},{r:7,c:3},{r:7,c:4},{r:7,c:5},{r:7,c:6},{r:6,c:6}]},
-      {id:4,color:'#a78bfa',dirs:['DL','UR'],  cells:[{r:5,c:4},{r:4,c:5},{r:3,c:5},{r:3,c:4},{r:3,c:3}]},
-    ]},
-  // Level 8 — 9×9, 6 snakes, 5 stones
-  { cols:9, rows:9,
-    stones:[{r:2,c:4},{r:4,c:2},{r:4,c:6},{r:6,c:4},{r:4,c:4}],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:7},{r:1,c:6},{r:1,c:5},{r:1,c:4},{r:1,c:3}]},
-      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:6,c:7},{r:5,c:7},{r:4,c:7},{r:3,c:7},{r:2,c:7}]},
-      {id:3,color:'#4ade80',dirs:['L','R'],    cells:[{r:7,c:1},{r:7,c:2},{r:7,c:3},{r:7,c:4},{r:7,c:5}]},
-      {id:4,color:'#a78bfa',dirs:['DR_','UL'], cells:[{r:3,c:3},{r:3,c:2},{r:2,c:2},{r:2,c:3}]},
-      {id:5,color:'#fb923c',dirs:['D'],        cells:[{r:5,c:5},{r:5,c:6},{r:6,c:6},{r:7,c:6},{r:7,c:7}]},
-    ]},
+{
+  rows:12,cols:12,
+  stones:[],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['D','U'],cells:[{r:7,c:2},{r:6,c:2},{r:5,c:2},{r:5,c:3},{r:4,c:3},{r:3,c:3},{r:3,c:2},{r:3,c:1},{r:2,c:1}]},
+  {id:1,color:'#60a5fa',dirs:['U','R'],cells:[{r:7,c:8},{r:7,c:9},{r:8,c:9},{r:9,c:9},{r:9,c:10},{r:10,c:10},{r:10,c:11}]},
+  {id:2,color:'#4ade80',dirs:['R','U'],cells:[{r:3,c:9},{r:2,c:9},{r:2,c:10},{r:2,c:11},{r:3,c:11},{r:4,c:11},{r:5,c:11},{r:6,c:11},{r:6,c:10},{r:6,c:9},{r:6,c:8},{r:5,c:8}]},
+  {id:3,color:'#fbbf24',dirs:['R','R'],cells:[{r:8,c:5},{r:9,c:5},{r:9,c:6},{r:10,c:6},{r:10,c:7},{r:10,c:8},{r:11,c:8},{r:11,c:9},{r:11,c:10},{r:11,c:11}]},
+  {id:4,color:'#a78bfa',dirs:['L','D'],cells:[{r:0,c:3},{r:0,c:4},{r:1,c:4},{r:2,c:4},{r:2,c:3},{r:2,c:2},{r:1,c:2},{r:1,c:1},{r:1,c:0},{r:2,c:0},{r:3,c:0}]},
+  {id:5,color:'#fb923c',dirs:['L','R'],cells:[{r:10,c:2},{r:9,c:2},{r:8,c:2},{r:8,c:3},{r:7,c:3},{r:7,c:4},{r:6,c:4},{r:5,c:4},{r:4,c:4},{r:3,c:4},{r:3,c:5}]},
+  {id:6,color:'#34d399',dirs:['L','R'],cells:[{r:8,c:6},{r:7,c:6},{r:6,c:6},{r:6,c:5},{r:5,c:5},{r:4,c:5},{r:4,c:6}]},
+  {id:7,color:'#f87171',dirs:['R','D'],cells:[{r:0,c:11},{r:1,c:11},{r:1,c:10},{r:1,c:9},{r:0,c:9},{r:0,c:8},{r:0,c:7},{r:0,c:6},{r:0,c:5},{r:1,c:5}]},
+  {id:8,color:'#e879f9',dirs:['R','U'],cells:[{r:5,c:10},{r:5,c:9},{r:4,c:9},{r:4,c:8},{r:4,c:7},{r:3,c:7},{r:3,c:6},{r:2,c:6},{r:1,c:6}]},
+  {id:9,color:'#2dd4bf',dirs:['R','L'],cells:[{r:10,c:5},{r:10,c:4},{r:10,c:3},{r:11,c:3},{r:11,c:2},{r:11,c:1},{r:10,c:1},{r:9,c:1},{r:9,c:0}]}
+  ]
+},
 
-  // ── TIER 3: BOUNCERS ─────────────────────────
-  // Level 9 — 6x6, 4 snakes, 1 bouncer (MUST use bouncer to solve)
-  // Pink fires D, hits bouncer at (3,3), reverses to U, exits top
-  { cols:6, rows:6,
-    bouncers:[{r:3,c:3}],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['D'],   cells:[{r:2,c:3},{r:2,c:2},{r:2,c:1},{r:3,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R'],   cells:[{r:1,c:5},{r:1,c:4},{r:1,c:3},{r:1,c:2}]},
-      {id:2,color:'#4ade80',dirs:['L'],   cells:[{r:4,c:1},{r:4,c:2},{r:4,c:3},{r:4,c:4}]},
-      {id:3,color:'#fbbf24',dirs:['D'],   cells:[{r:4,c:5},{r:3,c:5},{r:2,c:5},{r:2,c:4}]},
-    ]},
-  // Level 10 — 8×8, 5 snakes, 2 bouncers
-  { cols:8, rows:8,
-    bouncers:[{r:2,c:4},{r:5,c:3}],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:6},{r:1,c:5},{r:1,c:4},{r:1,c:3}]},
-      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:3,c:7},{r:2,c:7},{r:1,c:7},{r:2,c:6}]},
-      {id:3,color:'#4ade80',dirs:['L','R'],    cells:[{r:6,c:1},{r:6,c:2},{r:6,c:3},{r:6,c:4},{r:6,c:5}]},
-      {id:4,color:'#a78bfa',dirs:['UL','DR_'], cells:[{r:4,c:6},{r:5,c:7},{r:6,c:8}]},
-    ]},
-  // Level 11 — 9×9, 5 snakes, 3 bouncers
-  { cols:9, rows:9,
-    bouncers:[{r:2,c:5},{r:5,c:2},{r:6,c:6}],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:7},{r:1,c:6},{r:1,c:5},{r:1,c:4},{r:1,c:3}]},
-      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:5,c:8},{r:4,c:8},{r:3,c:8},{r:2,c:8},{r:1,c:8}]},
-      {id:3,color:'#4ade80',dirs:['L'],        cells:[{r:7,c:3},{r:7,c:4},{r:7,c:5},{r:7,c:6},{r:7,c:7}]},
-      {id:4,color:'#a78bfa',dirs:['U','DL'],  cells:[{r:7,c:1},{r:6,c:2},{r:5,c:3},{r:4,c:3},{r:3,c:3}]},
-    ]},
-  // Level 12 — 9×9, 6 snakes, 3 bouncers + 2 stones
-  { cols:9, rows:9,
-    stones:[{r:3,c:6},{r:6,c:3}],
-    bouncers:[{r:2,c:4},{r:5,c:5},{r:7,c:2}],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:7},{r:1,c:6},{r:1,c:5},{r:1,c:4},{r:1,c:3}]},
-      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:4,c:8},{r:3,c:8},{r:2,c:8},{r:1,c:8}]},
-      {id:3,color:'#4ade80',dirs:['L','R'],    cells:[{r:7,c:3},{r:7,c:4},{r:7,c:5},{r:7,c:6},{r:7,c:7}]},
-      {id:4,color:'#a78bfa',dirs:['UL','DR_'], cells:[{r:4,c:4},{r:5,c:4},{r:6,c:4},{r:6,c:5}]},
-      {id:5,color:'#fb923c',dirs:['R'],        cells:[{r:6,c:2},{r:5,c:2},{r:4,c:2},{r:5,c:3}]},
-    ]},
+{
+  rows:12,cols:12,
+  stones:[],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['L','L'],cells:[{r:9,c:9},{r:8,c:9},{r:7,c:9},{r:7,c:10},{r:7,c:11},{r:8,c:11},{r:9,c:11},{r:10,c:11},{r:11,c:11},{r:11,c:10},{r:11,c:9},{r:11,c:8},{r:11,c:7}]},
+  {id:1,color:'#60a5fa',dirs:['L','U'],cells:[{r:9,c:5},{r:8,c:5},{r:8,c:6},{r:8,c:7},{r:7,c:7},{r:7,c:8},{r:6,c:8}]},
+  {id:2,color:'#4ade80',dirs:['D'],cells:[{r:4,c:0},{r:4,c:1},{r:4,c:2},{r:5,c:2},{r:5,c:3},{r:6,c:3},{r:6,c:4},{r:6,c:5},{r:5,c:5},{r:5,c:6},{r:5,c:7}]},
+  {id:3,color:'#fbbf24',dirs:['U','D'],cells:[{r:0,c:6},{r:1,c:6},{r:1,c:7},{r:2,c:7},{r:2,c:8},{r:3,c:8},{r:3,c:9},{r:4,c:9},{r:5,c:9}]},
+  {id:4,color:'#a78bfa',dirs:['U'],cells:[{r:0,c:9},{r:1,c:9},{r:1,c:10},{r:1,c:11},{r:2,c:11},{r:3,c:11},{r:4,c:11},{r:4,c:10}]},
+  {id:5,color:'#fb923c',dirs:['U','U'],cells:[{r:3,c:6},{r:3,c:5},{r:4,c:5},{r:4,c:4},{r:4,c:3},{r:3,c:3},{r:3,c:2},{r:3,c:1},{r:3,c:0},{r:2,c:0}]},
+  {id:6,color:'#34d399',dirs:['L','R'],cells:[{r:8,c:2},{r:9,c:2},{r:9,c:3},{r:9,c:4},{r:10,c:4},{r:11,c:4},{r:11,c:5},{r:11,c:6}]},
+  {id:7,color:'#f87171',dirs:['L','R'],cells:[{r:7,c:0},{r:7,c:1},{r:8,c:1},{r:9,c:1},{r:9,c:0},{r:10,c:0},{r:11,c:0},{r:11,c:1},{r:11,c:2},{r:10,c:2},{r:10,c:3}]},
+  {id:8,color:'#e879f9',dirs:['U','R'],cells:[{r:6,c:0},{r:6,c:1},{r:6,c:2},{r:7,c:2},{r:7,c:3},{r:7,c:4},{r:7,c:5},{r:7,c:6}]},
+  {id:9,color:'#2dd4bf',dirs:['D','R'],cells:[{r:0,c:4},{r:0,c:3},{r:1,c:3},{r:2,c:3},{r:2,c:4},{r:2,c:5},{r:2,c:6}]}
+  ]
+},
 
-  // ── TIER 4: TUNNELS ──────────────────────────
-  // Level 13 — 7x7, 4 snakes, 1 tunnel (MUST use tunnel to solve)
-  // Pink fires R, enters tunnel at (1,3), exits at (5,1), continues R, exits right
-  { cols:7, rows:7,
-    tunnels:[[{r:1,c:3},{r:5,c:1}]],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['R'],   cells:[{r:1,c:2},{r:1,c:1},{r:2,c:1},{r:3,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['U'],   cells:[{r:3,c:5},{r:4,c:5},{r:5,c:5},{r:5,c:4}]},
-      {id:2,color:'#fbbf24',dirs:['R'],   cells:[{r:5,c:3},{r:5,c:2},{r:6,c:2},{r:6,c:1}]},
-      {id:3,color:'#4ade80',dirs:['D'],   cells:[{r:3,c:6},{r:2,c:6},{r:1,c:6},{r:1,c:5}]},
-    ]},
-  // Level 14 — 9×9, 5 snakes, 2 tunnel pairs, 1 navigator
-  { cols:9, rows:9,
-    tunnels:[[{r:2,c:4},{r:6,c:4}],[{r:4,c:2},{r:4,c:8}]],
-    navigators:[{r:3,c:5,orient:'D1'}],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:7},{r:1,c:6},{r:1,c:5},{r:1,c:4},{r:1,c:3}]},
-      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:6,c:7},{r:5,c:7},{r:4,c:7},{r:3,c:7}]},
-      {id:3,color:'#4ade80',dirs:['L'],        cells:[{r:7,c:2},{r:7,c:3},{r:7,c:4},{r:7,c:5},{r:7,c:6}]},
-      {id:4,color:'#a78bfa',dirs:['UL','DR_'], cells:[{r:3,c:3},{r:4,c:4},{r:5,c:5},{r:6,c:6}]},
-    ]},
-  // Level 15 — 9×9, 6 snakes, 2 tunnels + 2 stones + 1 navigator
-  { cols:9, rows:9,
-    stones:[{r:3,c:5},{r:6,c:5}],
-    tunnels:[[{r:1,c:5},{r:7,c:3}],[{r:4,c:8},{r:8,c:2}]],
-    navigators:[{r:5,c:6,orient:'H'}],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:7},{r:1,c:6},{r:2,c:6},{r:2,c:5},{r:2,c:4},{r:2,c:3},{r:1,c:3}]},
-      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:6,c:7},{r:5,c:7},{r:4,c:7},{r:3,c:7}]},
-      {id:3,color:'#4ade80',dirs:['L','R'],    cells:[{r:7,c:4},{r:7,c:5},{r:7,c:6},{r:7,c:7}]},
-      {id:4,color:'#a78bfa',dirs:['DR_','UL'], cells:[{r:3,c:4},{r:4,c:4},{r:5,c:4},{r:6,c:4}]},
-      {id:5,color:'#fb923c',dirs:['R'],        cells:[{r:8,c:1},{r:7,c:1},{r:6,c:1},{r:6,c:2}]},
-    ]},
-  // Level 16 — 10×10, 7 snakes, all obstacles
-  { cols:10, rows:10,
-    stones:[{r:3,c:5},{r:6,c:4}],
-    bouncers:[{r:4,c:7},{r:6,c:2}],
-    tunnels:[[{r:1,c:5},{r:8,c:4}],[{r:6,c:9},{r:6,c:1}]],
-    navigators:[{r:4,c:5,orient:'D2'},{r:7,c:5,orient:'V'}],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:8},{r:1,c:7},{r:2,c:7},{r:2,c:6},{r:2,c:5},{r:2,c:4},{r:2,c:3},{r:1,c:3}]},
-      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:5,c:9},{r:4,c:9},{r:3,c:9},{r:2,c:9}]},
-      {id:3,color:'#4ade80',dirs:['L','R'],    cells:[{r:9,c:2},{r:9,c:3},{r:9,c:4},{r:9,c:5},{r:9,c:6}]},
-      {id:4,color:'#a78bfa',dirs:['UL','DR_'], cells:[{r:3,c:3},{r:4,c:4},{r:5,c:5},{r:6,c:6},{r:7,c:7}]},
-      {id:5,color:'#fb923c',dirs:['UR','DL'],  cells:[{r:8,c:3},{r:7,c:3},{r:6,c:3},{r:5,c:3},{r:4,c:3}]},
-      {id:6,color:'#34d399',dirs:['L','R'],    cells:[{r:8,c:6},{r:8,c:7},{r:8,c:8},{r:7,c:8},{r:7,c:9}]},
-    ]},
+{
+  rows:12,cols:12,
+  stones:[],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['U','D'],cells:[{r:1,c:5},{r:1,c:4},{r:1,c:3},{r:2,c:3},{r:2,c:2},{r:2,c:1},{r:3,c:1},{r:3,c:0},{r:4,c:0},{r:5,c:0}]},
+  {id:1,color:'#60a5fa',dirs:['L','D'],cells:[{r:1,c:2},{r:0,c:2},{r:0,c:3},{r:0,c:4},{r:0,c:5},{r:0,c:6},{r:0,c:7},{r:1,c:7}]},
+  {id:2,color:'#4ade80',dirs:['U','L'],cells:[{r:4,c:9},{r:4,c:8},{r:5,c:8},{r:6,c:8},{r:6,c:7},{r:6,c:6},{r:5,c:6},{r:4,c:6},{r:4,c:5}]},
+  {id:3,color:'#fbbf24',dirs:['D','R'],cells:[{r:7,c:2},{r:6,c:2},{r:5,c:2},{r:5,c:3},{r:5,c:4},{r:4,c:4},{r:3,c:4},{r:2,c:4},{r:2,c:5},{r:2,c:6},{r:2,c:7},{r:2,c:8}]},
+  {id:4,color:'#a78bfa',dirs:['U','L'],cells:[{r:9,c:8},{r:10,c:8},{r:11,c:8},{r:11,c:7},{r:11,c:6},{r:10,c:6},{r:10,c:5},{r:10,c:4},{r:11,c:4},{r:11,c:3}]},
+  {id:5,color:'#fb923c',dirs:['L'],cells:[{r:8,c:3},{r:8,c:4},{r:8,c:5},{r:9,c:5},{r:9,c:6},{r:9,c:7},{r:8,c:7},{r:8,c:8},{r:7,c:8}]},
+  {id:6,color:'#34d399',dirs:['D','L'],cells:[{r:10,c:9},{r:10,c:10},{r:9,c:10},{r:9,c:11},{r:8,c:11},{r:7,c:11},{r:7,c:10},{r:7,c:9}]},
+  {id:7,color:'#f87171',dirs:['L','R'],cells:[{r:9,c:0},{r:10,c:0},{r:11,c:0},{r:11,c:1},{r:11,c:2},{r:10,c:2},{r:10,c:3},{r:9,c:3},{r:9,c:4}]},
+  {id:8,color:'#e879f9',dirs:['D'],cells:[{r:1,c:10},{r:1,c:9},{r:2,c:9},{r:3,c:9},{r:3,c:10},{r:3,c:11},{r:4,c:11},{r:5,c:11},{r:6,c:11},{r:6,c:10},{r:6,c:9}]},
+  {id:9,color:'#2dd4bf',dirs:['U'],cells:[{r:0,c:8},{r:0,c:9},{r:0,c:10},{r:0,c:11},{r:1,c:11},{r:2,c:11},{r:2,c:10}]}
+  ]
+},
 
-  // ── TIER 5: NAVIGATORS ───────────────────────
-  // Level 17 — 6x6, 4 snakes, 1 navigator (MUST use navigator to solve)
-  // Pink fires R, hits D2 navigator at (3,2), deflects to U, exits top
-  { cols:6, rows:6,
-    navigators:[{r:3,c:2,orient:'D2'}],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['R'],   cells:[{r:3,c:1},{r:4,c:1},{r:5,c:1},{r:5,c:2}]},
-      {id:1,color:'#60a5fa',dirs:['R'],   cells:[{r:1,c:4},{r:1,c:3},{r:1,c:2},{r:1,c:1}]},
-      {id:2,color:'#fbbf24',dirs:['D'],   cells:[{r:4,c:4},{r:3,c:4},{r:2,c:4},{r:2,c:5}]},
-      {id:3,color:'#4ade80',dirs:['L'],   cells:[{r:5,c:3},{r:5,c:4},{r:5,c:5},{r:4,c:5}]},
-    ]},
-  // Level 18 — 8×8, 5 snakes, 3 navigators
-  { cols:8, rows:8,
-    navigators:[{r:2,c:4,orient:'V'},{r:5,c:3,orient:'D2'},{r:4,c:6,orient:'H'}],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1},{r:6,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R'],        cells:[{r:1,c:5},{r:1,c:4},{r:1,c:3},{r:1,c:2}]},
-      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:2,c:7},{r:1,c:7},{r:1,c:6},{r:2,c:6}]},
-      {id:3,color:'#4ade80',dirs:['L','R'],    cells:[{r:6,c:3},{r:6,c:4},{r:6,c:5},{r:6,c:6}]},
-      {id:4,color:'#a78bfa',dirs:['UL','DR_'], cells:[{r:3,c:3},{r:4,c:4},{r:5,c:4}]},
-    ]},
-  // Level 19 — 9×9, 5 snakes, 3 navigators + 1 stone
-  { cols:9, rows:9,
-    stones:[{r:5,c:5}],
-    navigators:[{r:2,c:3,orient:'D2'},{r:4,c:6,orient:'D1'},{r:6,c:2,orient:'H'}],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:7},{r:1,c:6},{r:1,c:5},{r:1,c:4}]},
-      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:5,c:8},{r:4,c:8},{r:3,c:8},{r:2,c:8}]},
-      {id:3,color:'#4ade80',dirs:['L'],        cells:[{r:7,c:4},{r:7,c:5},{r:7,c:6},{r:7,c:7}]},
-      {id:4,color:'#a78bfa',dirs:['DL','UR'],  cells:[{r:3,c:3},{r:4,c:3},{r:5,c:2},{r:6,c:1}]},
-    ]},
-  // Level 20 — 10×10, 7 snakes, 4 navigators + 1 bouncer + 1 tunnel
-  { cols:10, rows:10,
-    bouncers:[{r:5,c:5}],
-    tunnels:[[{r:1,c:5},{r:8,c:4}]],
-    navigators:[{r:3,c:3,orient:'D1'},{r:3,c:7,orient:'D2'},{r:7,c:3,orient:'D2'},{r:7,c:7,orient:'D1'}],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'],        cells:[{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1},{r:6,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R','L'],    cells:[{r:1,c:8},{r:1,c:7},{r:2,c:7},{r:2,c:6},{r:2,c:5},{r:2,c:4},{r:2,c:3},{r:1,c:3}]},
-      {id:2,color:'#fbbf24',dirs:['D'],        cells:[{r:4,c:9},{r:3,c:9},{r:2,c:9},{r:1,c:9}]},
-      {id:3,color:'#4ade80',dirs:['L','R'],    cells:[{r:9,c:3},{r:9,c:4},{r:9,c:5},{r:9,c:6},{r:9,c:7}]},
-      {id:4,color:'#a78bfa',dirs:['UL','DR_'], cells:[{r:4,c:4},{r:5,c:4},{r:6,c:4},{r:6,c:5}]},
-      {id:5,color:'#fb923c',dirs:['R'],        cells:[{r:7,c:2},{r:7,c:1},{r:8,c:1},{r:8,c:2}]},
-      {id:6,color:'#34d399',dirs:['U'],        cells:[{r:8,c:9},{r:8,c:8},{r:8,c:7},{r:8,c:6},{r:8,c:5}]},
-    ]},
+{
+  rows:12,cols:12,
+  stones:[],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['D','R'],cells:[{r:5,c:2},{r:4,c:2},{r:4,c:1},{r:4,c:0},{r:3,c:0},{r:2,c:0},{r:2,c:1}]},
+  {id:1,color:'#60a5fa',dirs:['D','L'],cells:[{r:1,c:6},{r:0,c:6},{r:0,c:5},{r:0,c:4},{r:0,c:3},{r:1,c:3},{r:2,c:3},{r:2,c:2},{r:3,c:2},{r:3,c:1}]},
+  {id:2,color:'#4ade80',dirs:['R','R'],cells:[{r:4,c:9},{r:4,c:8},{r:4,c:7},{r:3,c:7},{r:2,c:7},{r:1,c:7},{r:0,c:7},{r:0,c:8}]},
+  {id:3,color:'#fbbf24',dirs:['R','L'],cells:[{r:7,c:2},{r:6,c:2},{r:6,c:3},{r:6,c:4},{r:6,c:5},{r:6,c:6},{r:7,c:6},{r:8,c:6},{r:8,c:5}]},
+  {id:4,color:'#a78bfa',dirs:['U'],cells:[{r:1,c:8},{r:2,c:8},{r:2,c:9},{r:3,c:9},{r:3,c:10},{r:3,c:11},{r:2,c:11}]},
+  {id:5,color:'#fb923c',dirs:['D','U'],cells:[{r:9,c:2},{r:9,c:1},{r:10,c:1},{r:11,c:1},{r:11,c:2},{r:11,c:3},{r:11,c:4},{r:10,c:4}]},
+  {id:6,color:'#34d399',dirs:['L'],cells:[{r:4,c:3},{r:5,c:3},{r:5,c:4},{r:5,c:5},{r:4,c:5},{r:4,c:6},{r:3,c:6},{r:2,c:6},{r:2,c:5},{r:1,c:5},{r:1,c:4}]},
+  {id:7,color:'#f87171',dirs:['R','L'],cells:[{r:11,c:8},{r:10,c:8},{r:10,c:9},{r:10,c:10},{r:10,c:11},{r:9,c:11},{r:8,c:11},{r:7,c:11},{r:6,c:11},{r:6,c:10},{r:6,c:9},{r:7,c:9},{r:7,c:8}]},
+  {id:8,color:'#e879f9',dirs:['U'],cells:[{r:9,c:6},{r:9,c:7},{r:10,c:7},{r:11,c:7},{r:11,c:6},{r:11,c:5},{r:10,c:5}]},
+  {id:9,color:'#2dd4bf',dirs:['D'],cells:[{r:5,c:8},{r:5,c:7},{r:6,c:7},{r:7,c:7},{r:8,c:7},{r:8,c:8},{r:8,c:9},{r:8,c:10}]}
+  ]
+},
 
-  // ── TIER 6: BUNNIES ──────────────────────────
-  // Level 21 — 6x6, 3 snakes, 2 bunnies (intro — all bunnies must be eaten to win)
-  { cols:6, rows:6,
-    bunnies:[{r:3,c:3},{r:2,c:3}],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['R'], cells:[{r:3,c:1},{r:4,c:1},{r:5,c:1},{r:5,c:2}]},
-      {id:1,color:'#60a5fa',dirs:['D'], cells:[{r:1,c:3},{r:1,c:2},{r:1,c:1},{r:2,c:1}]},
-      {id:2,color:'#4ade80',dirs:['L'], cells:[{r:4,c:4},{r:4,c:5},{r:3,c:5},{r:2,c:5}]},
-    ]},
-  // Level 22 — 7x7, 4 snakes, 3 bunnies
-  { cols:7, rows:7,
-    bunnies:[{r:2,c:2},{r:4,c:4},{r:3,c:5}],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'], cells:[{r:3,c:2},{r:4,c:2},{r:5,c:2},{r:5,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R'], cells:[{r:4,c:3},{r:3,c:3},{r:2,c:3},{r:2,c:4}]},
-      {id:2,color:'#fbbf24',dirs:['D'], cells:[{r:2,c:5},{r:1,c:5},{r:1,c:4},{r:1,c:3}]},
-      {id:3,color:'#4ade80',dirs:['L'], cells:[{r:6,c:3},{r:6,c:4},{r:5,c:4},{r:5,c:5}]},
-    ]},
+{
+  rows:12,cols:12,
+  stones:[],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['R'],cells:[{r:4,c:3},{r:3,c:3},{r:3,c:4},{r:3,c:5},{r:4,c:5},{r:5,c:5},{r:5,c:6},{r:6,c:6},{r:6,c:7}]},
+  {id:1,color:'#60a5fa',dirs:['U','D'],cells:[{r:1,c:4},{r:1,c:5},{r:1,c:6},{r:0,c:6},{r:0,c:7},{r:0,c:8},{r:1,c:8},{r:2,c:8}]},
+  {id:2,color:'#4ade80',dirs:['R','U'],cells:[{r:8,c:0},{r:7,c:0},{r:6,c:0},{r:6,c:1},{r:5,c:1},{r:5,c:2},{r:4,c:2},{r:3,c:2},{r:2,c:2},{r:2,c:3},{r:1,c:3}]},
+  {id:3,color:'#fbbf24',dirs:['D','U'],cells:[{r:10,c:6},{r:10,c:7},{r:11,c:7},{r:11,c:8},{r:11,c:9},{r:11,c:10},{r:11,c:11},{r:10,c:11},{r:9,c:11},{r:9,c:10},{r:8,c:10},{r:7,c:10}]},
+  {id:4,color:'#a78bfa',dirs:['R','L'],cells:[{r:8,c:8},{r:8,c:7},{r:9,c:7},{r:9,c:6},{r:9,c:5},{r:9,c:4},{r:9,c:3},{r:8,c:3},{r:7,c:3},{r:6,c:3},{r:6,c:2}]},
+  {id:5,color:'#fb923c',dirs:['R'],cells:[{r:4,c:0},{r:3,c:0},{r:2,c:0},{r:2,c:1},{r:1,c:1},{r:1,c:2},{r:0,c:2},{r:0,c:3},{r:0,c:4},{r:0,c:5}]},
+  {id:6,color:'#34d399',dirs:['R','U'],cells:[{r:10,c:8},{r:9,c:8},{r:9,c:9},{r:8,c:9},{r:7,c:9},{r:6,c:9},{r:6,c:8},{r:5,c:8}]},
+  {id:7,color:'#f87171',dirs:['U'],cells:[{r:9,c:2},{r:9,c:1},{r:9,c:0},{r:10,c:0},{r:11,c:0},{r:11,c:1},{r:11,c:2},{r:11,c:3}]},
+  {id:8,color:'#e879f9',dirs:['R','L'],cells:[{r:2,c:11},{r:1,c:11},{r:1,c:10},{r:1,c:9},{r:2,c:9},{r:3,c:9},{r:3,c:8},{r:3,c:7}]},
+  {id:9,color:'#2dd4bf',dirs:['R','D'],cells:[{r:1,c:7},{r:2,c:7},{r:2,c:6},{r:3,c:6},{r:4,c:6},{r:4,c:7},{r:4,c:8},{r:4,c:9},{r:5,c:9},{r:5,c:10},{r:6,c:10}]}
+  ]
+},
 
-  // ── TIER 7: PATROLLING OBSTACLES ─────────────
-  // Level 23 — 7x7, 3 snakes, 1 patrol stone (intro — time your snake!)
-  { cols:7, rows:7,
-    stones:[{r:3,c:1,patrol:[{r:3,c:1},{r:3,c:5}],speed:'slow'}],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['D'], cells:[{r:1,c:3},{r:1,c:2},{r:2,c:2},{r:2,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R'], cells:[{r:5,c:5},{r:5,c:4},{r:5,c:3},{r:5,c:2}]},
-      {id:2,color:'#4ade80',dirs:['U'], cells:[{r:4,c:6},{r:5,c:6},{r:6,c:6},{r:6,c:5}]},
-    ]},
-  // Level 24 — 8x8, 4 snakes, 2 patrol stones
-  { cols:8, rows:8,
-    stones:[
-      {r:2,c:3,patrol:[{r:2,c:3},{r:2,c:6}],speed:'medium'},
-      {r:5,c:4,patrol:[{r:5,c:4},{r:5,c:7}],speed:'fast'},
-    ],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'], cells:[{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R'], cells:[{r:1,c:6},{r:1,c:5},{r:1,c:4},{r:1,c:3}]},
-      {id:2,color:'#fbbf24',dirs:['D'], cells:[{r:4,c:7},{r:3,c:7},{r:2,c:7},{r:1,c:7}]},
-      {id:3,color:'#4ade80',dirs:['L'], cells:[{r:6,c:3},{r:6,c:4},{r:6,c:5},{r:6,c:6}]},
-    ]},
-  // Level 25 — 7x7, 3 snakes, 1 patrol bunny + 1 static bunny (patrol bunny intro)
-  { cols:7, rows:7,
-    bunnies:[
-      {r:2,c:3,patrol:[{r:2,c:3},{r:5,c:3}],speed:'medium'},
-      {r:4,c:5},
-    ],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'], cells:[{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R'], cells:[{r:6,c:5},{r:6,c:4},{r:6,c:3},{r:6,c:2}]},
-      {id:2,color:'#4ade80',dirs:['U'], cells:[{r:3,c:6},{r:4,c:6},{r:5,c:6},{r:6,c:6}]},
-    ]},
-  // Level 26 — 8x8, 4 snakes, 1 patrol stone + 2 patrol bunnies
-  { cols:8, rows:8,
-    stones:[{r:3,c:4,patrol:[{r:3,c:4},{r:6,c:4}],speed:'fast'}],
-    bunnies:[
-      {r:2,c:2,patrol:[{r:2,c:2},{r:2,c:6}],speed:'slow'},
-      {r:6,c:6,patrol:[{r:6,c:6},{r:6,c:2}],speed:'fast'},
-    ],
-    snakes:[
-      {id:0,color:'#f472b6',dirs:['U'], cells:[{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:5,c:1}]},
-      {id:1,color:'#60a5fa',dirs:['R'], cells:[{r:1,c:5},{r:1,c:4},{r:1,c:3},{r:1,c:2}]},
-      {id:2,color:'#fbbf24',dirs:['D'], cells:[{r:4,c:7},{r:3,c:7},{r:2,c:7},{r:1,c:7}]},
-      {id:3,color:'#4ade80',dirs:['L'], cells:[{r:7,c:3},{r:7,c:4},{r:7,c:5},{r:7,c:6}]},
-    ]},
+{
+  rows:12,cols:12,
+  stones:[],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['R','U'],cells:[{r:6,c:3},{r:7,c:3},{r:8,c:3},{r:8,c:2},{r:9,c:2},{r:10,c:2},{r:10,c:1},{r:10,c:0},{r:9,c:0},{r:8,c:0},{r:7,c:0}]},
+  {id:1,color:'#60a5fa',dirs:['L'],cells:[{r:1,c:8},{r:0,c:8},{r:0,c:9},{r:0,c:10},{r:1,c:10},{r:1,c:11},{r:2,c:11},{r:3,c:11},{r:3,c:10}]},
+  {id:2,color:'#4ade80',dirs:['U','D'],cells:[{r:0,c:6},{r:1,c:6},{r:1,c:5},{r:1,c:4},{r:1,c:3},{r:2,c:3},{r:2,c:2},{r:3,c:2},{r:4,c:2},{r:5,c:2},{r:6,c:2}]},
+  {id:3,color:'#fbbf24',dirs:['L','D'],cells:[{r:2,c:5},{r:2,c:6},{r:3,c:6},{r:3,c:7},{r:3,c:8},{r:4,c:8},{r:4,c:9},{r:4,c:10},{r:5,c:10}]},
+  {id:4,color:'#a78bfa',dirs:['R','U'],cells:[{r:10,c:9},{r:11,c:9},{r:11,c:10},{r:11,c:11},{r:10,c:11},{r:9,c:11},{r:8,c:11},{r:7,c:11}]},
+  {id:5,color:'#fb923c',dirs:['D','R'],cells:[{r:3,c:1},{r:2,c:1},{r:2,c:0},{r:1,c:0},{r:0,c:0},{r:0,c:1},{r:0,c:2},{r:0,c:3},{r:0,c:4},{r:0,c:5}]},
+  {id:6,color:'#34d399',dirs:['U','D'],cells:[{r:5,c:5},{r:5,c:6},{r:6,c:6},{r:6,c:7},{r:6,c:8},{r:7,c:8},{r:7,c:9},{r:8,c:9},{r:9,c:9},{r:9,c:8},{r:10,c:8},{r:11,c:8}]},
+  {id:7,color:'#f87171',dirs:['R','R'],cells:[{r:4,c:4},{r:5,c:4},{r:6,c:4},{r:6,c:5},{r:7,c:5},{r:8,c:5},{r:8,c:6}]},
+  {id:8,color:'#e879f9',dirs:['L'],cells:[{r:10,c:4},{r:9,c:4},{r:9,c:5},{r:9,c:6},{r:9,c:7},{r:8,c:7},{r:8,c:8}]},
+  {id:9,color:'#2dd4bf',dirs:['R','U'],cells:[{r:5,c:8},{r:5,c:7},{r:4,c:7},{r:4,c:6},{r:4,c:5},{r:3,c:5},{r:3,c:4},{r:2,c:4}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['D','U'],cells:[{r:4,c:8},{r:4,c:7},{r:4,c:6},{r:5,c:6},{r:5,c:5},{r:5,c:4},{r:4,c:4},{r:4,c:3},{r:3,c:3},{r:2,c:3},{r:2,c:4},{r:1,c:4},{r:0,c:4}]},
+  {id:1,color:'#60a5fa',dirs:['L'],cells:[{r:6,c:1},{r:6,c:2},{r:7,c:2},{r:7,c:3},{r:8,c:3},{r:8,c:4},{r:8,c:5}]},
+  {id:2,color:'#4ade80',dirs:['R','U'],cells:[{r:7,c:11},{r:6,c:11},{r:5,c:11},{r:5,c:10},{r:4,c:10},{r:3,c:10},{r:2,c:10},{r:2,c:11},{r:1,c:11}]},
+  {id:3,color:'#fbbf24',dirs:['U','U'],cells:[{r:11,c:7},{r:11,c:8},{r:11,c:9},{r:11,c:10},{r:10,c:10},{r:9,c:10},{r:9,c:9},{r:8,c:9},{r:7,c:9}]},
+  {id:4,color:'#a78bfa',dirs:['D','U'],cells:[{r:3,c:8},{r:3,c:7},{r:2,c:7},{r:2,c:6},{r:2,c:5},{r:1,c:5},{r:0,c:5}]},
+  {id:5,color:'#fb923c',dirs:['D','D'],cells:[{r:7,c:4},{r:7,c:5},{r:6,c:5},{r:6,c:6},{r:6,c:7},{r:6,c:8},{r:7,c:8},{r:8,c:8},{r:9,c:8}]},
+  {id:6,color:'#34d399',dirs:['R'],cells:[{r:5,c:0},{r:4,c:0},{r:4,c:1},{r:4,c:2},{r:3,c:2},{r:2,c:2},{r:1,c:2},{r:1,c:1}]},
+  {id:7,color:'#f87171',dirs:['L','U'],cells:[{r:8,c:10},{r:7,c:10},{r:6,c:10},{r:6,c:9},{r:5,c:9},{r:4,c:9},{r:3,c:9},{r:2,c:9},{r:1,c:9},{r:0,c:9}]},
+  {id:8,color:'#e879f9',dirs:['D'],cells:[{r:11,c:5},{r:10,c:5},{r:10,c:4},{r:10,c:3},{r:11,c:3},{r:11,c:2},{r:11,c:1},{r:11,c:0},{r:10,c:0},{r:9,c:0},{r:9,c:1}]},
+  {id:9,color:'#2dd4bf',dirs:['R','U'],cells:[{r:11,c:6},{r:10,c:6},{r:9,c:6},{r:9,c:5},{r:9,c:4},{r:9,c:3},{r:9,c:2},{r:8,c:2},{r:8,c:1},{r:7,c:1}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['R','R'],cells:[{r:6,c:2},{r:6,c:1},{r:7,c:1},{r:8,c:1},{r:8,c:0},{r:9,c:0},{r:10,c:0},{r:11,c:0},{r:11,c:1}]},
+  {id:1,color:'#60a5fa',dirs:['R','U'],cells:[{r:10,c:7},{r:11,c:7},{r:11,c:8},{r:11,c:9},{r:11,c:10},{r:11,c:11},{r:10,c:11},{r:9,c:11},{r:8,c:11},{r:8,c:10},{r:7,c:10}]},
+  {id:2,color:'#4ade80',dirs:['U','U'],cells:[{r:10,c:6},{r:10,c:5},{r:9,c:5},{r:9,c:4},{r:8,c:4},{r:7,c:4},{r:7,c:5},{r:6,c:5},{r:6,c:6},{r:5,c:6},{r:4,c:6}]},
+  {id:3,color:'#fbbf24',dirs:['U','R'],cells:[{r:4,c:5},{r:5,c:5},{r:5,c:4},{r:6,c:4},{r:6,c:3},{r:7,c:3},{r:7,c:2},{r:8,c:2},{r:9,c:2},{r:9,c:3}]},
+  {id:4,color:'#a78bfa',dirs:['R'],cells:[{r:3,c:5},{r:2,c:5},{r:1,c:5},{r:1,c:6},{r:1,c:7},{r:1,c:8},{r:2,c:8},{r:3,c:8},{r:3,c:9},{r:4,c:9},{r:5,c:9}]},
+  {id:5,color:'#fb923c',dirs:['L','D'],cells:[{r:0,c:6},{r:0,c:7},{r:0,c:8},{r:0,c:9},{r:1,c:9},{r:2,c:9},{r:2,c:10},{r:3,c:10}]},
+  {id:6,color:'#34d399',dirs:['R','R'],cells:[{r:3,c:7},{r:4,c:7},{r:5,c:7},{r:5,c:8},{r:6,c:8},{r:6,c:9},{r:6,c:10},{r:5,c:10},{r:5,c:11}]},
+  {id:7,color:'#f87171',dirs:['R'],cells:[{r:1,c:3},{r:1,c:2},{r:1,c:1},{r:1,c:0},{r:2,c:0},{r:3,c:0},{r:3,c:1},{r:4,c:1},{r:4,c:2},{r:4,c:3},{r:3,c:3},{r:3,c:4}]},
+  {id:8,color:'#e879f9',dirs:['L','L'],cells:[{r:0,c:0},{r:0,c:1},{r:0,c:2},{r:0,c:3},{r:0,c:4},{r:1,c:4},{r:2,c:4},{r:2,c:3}]},
+  {id:9,color:'#2dd4bf',dirs:['R'],cells:[{r:7,c:7},{r:7,c:6},{r:8,c:6},{r:9,c:6},{r:9,c:7},{r:9,c:8},{r:9,c:9},{r:9,c:10}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:2,c:1}],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['L','L'],cells:[{r:11,c:9},{r:11,c:10},{r:11,c:11},{r:10,c:11},{r:9,c:11},{r:9,c:10},{r:9,c:9},{r:9,c:8},{r:9,c:7},{r:8,c:7},{r:8,c:6},{r:8,c:5}]},
+  {id:1,color:'#60a5fa',dirs:['U','R'],cells:[{r:4,c:6},{r:5,c:6},{r:6,c:6},{r:7,c:6},{r:7,c:7},{r:7,c:8},{r:6,c:8},{r:6,c:9},{r:6,c:10}]},
+  {id:2,color:'#4ade80',dirs:['R','U'],cells:[{r:10,c:0},{r:11,c:0},{r:11,c:1},{r:11,c:2},{r:11,c:3},{r:10,c:3},{r:9,c:3},{r:9,c:2},{r:9,c:1},{r:8,c:1},{r:8,c:0},{r:7,c:0},{r:6,c:0}]},
+  {id:3,color:'#fbbf24',dirs:['R','U'],cells:[{r:9,c:6},{r:10,c:6},{r:10,c:5},{r:10,c:4},{r:9,c:4},{r:8,c:4},{r:7,c:4},{r:7,c:5},{r:6,c:5},{r:5,c:5},{r:4,c:5},{r:4,c:4},{r:3,c:4}]},
+  {id:4,color:'#a78bfa',dirs:['U','D'],cells:[{r:2,c:7},{r:3,c:7},{r:3,c:6},{r:3,c:5},{r:2,c:5},{r:2,c:4},{r:1,c:4},{r:1,c:3},{r:1,c:2},{r:2,c:2},{r:3,c:2}]},
+  {id:5,color:'#fb923c',dirs:['L'],cells:[{r:6,c:11},{r:5,c:11},{r:4,c:11},{r:4,c:10},{r:3,c:10},{r:2,c:10},{r:2,c:11},{r:1,c:11},{r:0,c:11},{r:0,c:10},{r:0,c:9}]},
+  {id:6,color:'#34d399',dirs:['L','U'],cells:[{r:7,c:2},{r:7,c:3},{r:6,c:3},{r:5,c:3},{r:4,c:3},{r:4,c:2},{r:4,c:1},{r:4,c:0},{r:3,c:0},{r:2,c:0},{r:1,c:0}]},
+  {id:7,color:'#f87171',dirs:['L','L'],cells:[{r:5,c:8},{r:4,c:8},{r:4,c:9},{r:3,c:9},{r:2,c:9},{r:2,c:8},{r:1,c:8},{r:1,c:7},{r:1,c:6}]},
+  {id:8,color:'#e879f9',dirs:['D','L'],cells:[{r:0,c:6},{r:0,c:5},{r:0,c:4},{r:0,c:3},{r:0,c:2},{r:0,c:1},{r:0,c:0}]},
+  {id:9,color:'#2dd4bf',dirs:['R','L'],cells:[{r:10,c:10},{r:10,c:9},{r:10,c:8},{r:11,c:8},{r:11,c:7},{r:11,c:6},{r:11,c:5},{r:11,c:4}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:10,c:9}],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['D','U'],cells:[{r:10,c:11},{r:9,c:11},{r:8,c:11},{r:8,c:10},{r:7,c:10},{r:6,c:10},{r:5,c:10},{r:4,c:10}]},
+  {id:1,color:'#60a5fa',dirs:['U','L'],cells:[{r:2,c:11},{r:3,c:11},{r:3,c:10},{r:3,c:9},{r:2,c:9},{r:2,c:8},{r:2,c:7},{r:3,c:7},{r:4,c:7},{r:4,c:8},{r:5,c:8},{r:6,c:8},{r:6,c:7}]},
+  {id:2,color:'#4ade80',dirs:['R','U'],cells:[{r:9,c:1},{r:10,c:1},{r:11,c:1},{r:11,c:2},{r:11,c:3},{r:11,c:4},{r:10,c:4},{r:10,c:5},{r:9,c:5},{r:9,c:6},{r:9,c:7},{r:8,c:7},{r:7,c:7}]},
+  {id:3,color:'#fbbf24',dirs:['L','L'],cells:[{r:2,c:10},{r:1,c:10},{r:1,c:9},{r:0,c:9},{r:0,c:8},{r:0,c:7},{r:1,c:7},{r:1,c:6},{r:1,c:5},{r:2,c:5},{r:2,c:4},{r:2,c:3}]},
+  {id:4,color:'#a78bfa',dirs:['U','R'],cells:[{r:2,c:0},{r:2,c:1},{r:2,c:2},{r:3,c:2},{r:3,c:3},{r:4,c:3},{r:4,c:4},{r:4,c:5}]},
+  {id:5,color:'#fb923c',dirs:['U','U'],cells:[{r:10,c:6},{r:10,c:7},{r:10,c:8},{r:9,c:8},{r:9,c:9},{r:8,c:9},{r:7,c:9},{r:6,c:9},{r:5,c:9},{r:4,c:9}]},
+  {id:6,color:'#34d399',dirs:['D'],cells:[{r:5,c:0},{r:5,c:1},{r:5,c:2},{r:5,c:3},{r:6,c:3},{r:6,c:4},{r:7,c:4},{r:8,c:4},{r:8,c:5},{r:8,c:6},{r:7,c:6},{r:6,c:6},{r:5,c:6}]},
+  {id:7,color:'#f87171',dirs:['U','D'],cells:[{r:6,c:0},{r:6,c:1},{r:6,c:2},{r:7,c:2},{r:8,c:2},{r:8,c:1},{r:8,c:0},{r:9,c:0},{r:10,c:0},{r:11,c:0}]},
+  {id:8,color:'#e879f9',dirs:['D','L'],cells:[{r:0,c:5},{r:0,c:4},{r:1,c:4},{r:1,c:3},{r:1,c:2},{r:0,c:2},{r:0,c:1},{r:0,c:0}]},
+  {id:9,color:'#2dd4bf',dirs:['L','U'],cells:[{r:11,c:5},{r:11,c:6},{r:11,c:7},{r:11,c:8},{r:11,c:9},{r:11,c:10},{r:10,c:10},{r:9,c:10}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:8,c:1}],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['R','U'],cells:[{r:10,c:8},{r:10,c:7},{r:9,c:7},{r:8,c:7},{r:8,c:8},{r:8,c:9},{r:8,c:10},{r:7,c:10}]},
+  {id:1,color:'#60a5fa',dirs:['L','L'],cells:[{r:4,c:10},{r:3,c:10},{r:3,c:11},{r:2,c:11},{r:1,c:11},{r:0,c:11},{r:0,c:10},{r:0,c:9},{r:1,c:9},{r:1,c:8}]},
+  {id:2,color:'#4ade80',dirs:['U','U'],cells:[{r:11,c:7},{r:11,c:6},{r:11,c:5},{r:10,c:5},{r:10,c:4},{r:10,c:3},{r:11,c:3},{r:11,c:2},{r:11,c:1},{r:11,c:0},{r:10,c:0}]},
+  {id:3,color:'#fbbf24',dirs:['D','R'],cells:[{r:2,c:9},{r:2,c:8},{r:2,c:7},{r:2,c:6},{r:3,c:6},{r:3,c:5},{r:4,c:5},{r:5,c:5},{r:6,c:5},{r:7,c:5},{r:7,c:6}]},
+  {id:4,color:'#a78bfa',dirs:['R','R'],cells:[{r:6,c:11},{r:5,c:11},{r:5,c:10},{r:5,c:9},{r:4,c:9},{r:4,c:8},{r:4,c:7},{r:4,c:6},{r:5,c:6},{r:6,c:6},{r:6,c:7}]},
+  {id:5,color:'#fb923c',dirs:['D'],cells:[{r:8,c:5},{r:8,c:4},{r:8,c:3},{r:8,c:2},{r:9,c:2},{r:9,c:1},{r:9,c:0},{r:8,c:0},{r:7,c:0},{r:6,c:0}]},
+  {id:6,color:'#34d399',dirs:['U','L'],cells:[{r:4,c:4},{r:5,c:4},{r:6,c:4},{r:7,c:4},{r:7,c:3},{r:7,c:2},{r:7,c:1},{r:6,c:1},{r:5,c:1},{r:5,c:0}]},
+  {id:7,color:'#f87171',dirs:['L','R'],cells:[{r:1,c:2},{r:2,c:2},{r:2,c:1},{r:2,c:0},{r:3,c:0},{r:4,c:0},{r:4,c:1},{r:4,c:2},{r:4,c:3},{r:3,c:3},{r:3,c:4},{r:2,c:4},{r:2,c:5}]},
+  {id:8,color:'#e879f9',dirs:['D','L'],cells:[{r:9,c:8},{r:9,c:9},{r:9,c:10},{r:9,c:11},{r:10,c:11},{r:11,c:11},{r:11,c:10},{r:11,c:9}]},
+  {id:9,color:'#2dd4bf',dirs:['L','R'],cells:[{r:1,c:1},{r:0,c:1},{r:0,c:2},{r:0,c:3},{r:0,c:4},{r:1,c:4},{r:1,c:5},{r:1,c:6}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:10,c:6}],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['L'],cells:[{r:3,c:6},{r:4,c:6},{r:5,c:6},{r:5,c:7},{r:5,c:8},{r:5,c:9},{r:6,c:9},{r:6,c:10},{r:6,c:11},{r:7,c:11}]},
+  {id:1,color:'#60a5fa',dirs:['D','L'],cells:[{r:4,c:9},{r:4,c:10},{r:3,c:10},{r:2,c:10},{r:2,c:9},{r:2,c:8},{r:1,c:8},{r:0,c:8},{r:0,c:7},{r:0,c:6},{r:0,c:5},{r:0,c:4}]},
+  {id:2,color:'#4ade80',dirs:['L','U'],cells:[{r:0,c:2},{r:1,c:2},{r:1,c:3},{r:2,c:3},{r:2,c:4},{r:2,c:5},{r:1,c:5}]},
+  {id:3,color:'#fbbf24',dirs:['R','R'],cells:[{r:6,c:3},{r:7,c:3},{r:7,c:4},{r:8,c:4},{r:9,c:4},{r:9,c:5},{r:10,c:5},{r:11,c:5},{r:11,c:6}]},
+  {id:4,color:'#a78bfa',dirs:['L'],cells:[{r:9,c:7},{r:10,c:7},{r:10,c:8},{r:10,c:9},{r:10,c:10},{r:9,c:10},{r:8,c:10},{r:7,c:10},{r:7,c:9},{r:7,c:8}]},
+  {id:5,color:'#fb923c',dirs:['U','D'],cells:[{r:1,c:0},{r:1,c:1},{r:2,c:1},{r:2,c:2},{r:3,c:2},{r:4,c:2},{r:4,c:1},{r:4,c:0},{r:5,c:0},{r:6,c:0},{r:7,c:0},{r:7,c:1},{r:8,c:1}]},
+  {id:6,color:'#34d399',dirs:['U','U'],cells:[{r:9,c:3},{r:10,c:3},{r:10,c:2},{r:11,c:2},{r:11,c:1},{r:11,c:0},{r:10,c:0},{r:9,c:0}]},
+  {id:7,color:'#f87171',dirs:['D'],cells:[{r:9,c:1},{r:9,c:2},{r:8,c:2},{r:7,c:2},{r:6,c:2},{r:5,c:2},{r:5,c:3},{r:4,c:3},{r:4,c:4},{r:4,c:5}]},
+  {id:8,color:'#e879f9',dirs:['L'],cells:[{r:5,c:10},{r:5,c:11},{r:4,c:11},{r:3,c:11},{r:2,c:11},{r:1,c:11},{r:1,c:10},{r:0,c:10}]},
+  {id:9,color:'#2dd4bf',dirs:['L'],cells:[{r:6,c:4},{r:6,c:5},{r:7,c:5},{r:7,c:6},{r:7,c:7},{r:8,c:7},{r:8,c:8}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:10,c:3},{r:9,c:3}],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['L'],cells:[{r:7,c:9},{r:8,c:9},{r:8,c:10},{r:8,c:11},{r:9,c:11},{r:10,c:11},{r:11,c:11},{r:11,c:10},{r:11,c:9},{r:10,c:9},{r:10,c:8},{r:9,c:8}]},
+  {id:1,color:'#60a5fa',dirs:['R','U'],cells:[{r:5,c:7},{r:4,c:7},{r:3,c:7},{r:3,c:8},{r:2,c:8},{r:1,c:8},{r:0,c:8}]},
+  {id:2,color:'#4ade80',dirs:['R','L'],cells:[{r:10,c:5},{r:9,c:5},{r:9,c:4},{r:8,c:4},{r:8,c:3},{r:7,c:3},{r:7,c:2}]},
+  {id:3,color:'#fbbf24',dirs:['U','U'],cells:[{r:1,c:2},{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:3,c:2},{r:4,c:2},{r:4,c:3},{r:4,c:4},{r:4,c:5},{r:4,c:6},{r:3,c:6},{r:2,c:6}]},
+  {id:4,color:'#a78bfa',dirs:['R','D'],cells:[{r:2,c:3},{r:1,c:3},{r:0,c:3},{r:0,c:4},{r:0,c:5},{r:1,c:5},{r:2,c:5}]},
+  {id:5,color:'#fb923c',dirs:['D','U'],cells:[{r:11,c:7},{r:10,c:7},{r:10,c:6},{r:9,c:6},{r:8,c:6},{r:7,c:6},{r:6,c:6}]},
+  {id:6,color:'#34d399',dirs:['R'],cells:[{r:4,c:11},{r:4,c:10},{r:5,c:10},{r:5,c:9},{r:5,c:8},{r:6,c:8},{r:6,c:7},{r:7,c:7},{r:8,c:7},{r:8,c:8}]},
+  {id:7,color:'#f87171',dirs:['L','R'],cells:[{r:8,c:1},{r:7,c:1},{r:7,c:0},{r:6,c:0},{r:5,c:0},{r:5,c:1},{r:5,c:2},{r:6,c:2},{r:6,c:3},{r:6,c:4},{r:5,c:4},{r:5,c:5},{r:5,c:6}]},
+  {id:8,color:'#e879f9',dirs:['D'],cells:[{r:4,c:8},{r:4,c:9},{r:3,c:9},{r:2,c:9},{r:2,c:10},{r:1,c:10},{r:1,c:11}]},
+  {id:9,color:'#2dd4bf',dirs:['U','R'],cells:[{r:0,c:2},{r:0,c:1},{r:0,c:0},{r:1,c:0},{r:2,c:0},{r:3,c:0},{r:4,c:0},{r:4,c:1}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:9,c:3},{r:6,c:5}],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['D','L'],cells:[{r:9,c:4},{r:8,c:4},{r:8,c:3},{r:7,c:3},{r:6,c:3},{r:5,c:3},{r:5,c:2},{r:4,c:2},{r:4,c:1},{r:3,c:1},{r:2,c:1},{r:2,c:0}]},
+  {id:1,color:'#60a5fa',dirs:['R','R'],cells:[{r:8,c:8},{r:8,c:7},{r:7,c:7},{r:6,c:7},{r:6,c:8},{r:6,c:9},{r:5,c:9},{r:5,c:10},{r:4,c:10},{r:3,c:10},{r:2,c:10},{r:2,c:11}]},
+  {id:2,color:'#4ade80',dirs:['R','U'],cells:[{r:8,c:2},{r:8,c:1},{r:9,c:1},{r:10,c:1},{r:10,c:2},{r:11,c:2},{r:11,c:3},{r:11,c:4},{r:11,c:5},{r:11,c:6},{r:11,c:7},{r:10,c:7}]},
+  {id:3,color:'#fbbf24',dirs:['D'],cells:[{r:9,c:9},{r:9,c:10},{r:8,c:10},{r:7,c:10},{r:7,c:11},{r:6,c:11},{r:5,c:11},{r:4,c:11}]},
+  {id:4,color:'#a78bfa',dirs:['U'],cells:[{r:1,c:11},{r:1,c:10},{r:0,c:10},{r:0,c:9},{r:0,c:8},{r:1,c:8},{r:1,c:7},{r:2,c:7},{r:3,c:7},{r:4,c:7},{r:4,c:8},{r:5,c:8}]},
+  {id:5,color:'#fb923c',dirs:['L','D'],cells:[{r:1,c:0},{r:0,c:0},{r:0,c:1},{r:0,c:2},{r:1,c:2},{r:2,c:2},{r:3,c:2},{r:3,c:3},{r:4,c:3}]},
+  {id:6,color:'#34d399',dirs:['U','U'],cells:[{r:9,c:7},{r:9,c:6},{r:9,c:5},{r:8,c:5},{r:7,c:5},{r:7,c:4},{r:6,c:4},{r:5,c:4},{r:5,c:5},{r:4,c:5},{r:3,c:5}]},
+  {id:7,color:'#f87171',dirs:['L'],cells:[{r:5,c:0},{r:5,c:1},{r:6,c:1},{r:7,c:1},{r:7,c:0},{r:8,c:0},{r:9,c:0},{r:10,c:0},{r:11,c:0},{r:11,c:1}]},
+  {id:8,color:'#e879f9',dirs:['D','U'],cells:[{r:5,c:7},{r:5,c:6},{r:4,c:6},{r:3,c:6},{r:2,c:6},{r:2,c:5},{r:2,c:4},{r:1,c:4}]},
+  {id:9,color:'#2dd4bf',dirs:['R'],cells:[{r:1,c:6},{r:1,c:5},{r:0,c:5},{r:0,c:4},{r:0,c:3},{r:1,c:3},{r:2,c:3}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:9,c:5},{r:1,c:10}],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['L'],cells:[{r:6,c:1},{r:7,c:1},{r:8,c:1},{r:9,c:1},{r:9,c:2},{r:9,c:3},{r:8,c:3},{r:7,c:3}]},
+  {id:1,color:'#60a5fa',dirs:['U','L'],cells:[{r:0,c:6},{r:0,c:7},{r:1,c:7},{r:2,c:7},{r:3,c:7},{r:4,c:7},{r:4,c:6}]},
+  {id:2,color:'#4ade80',dirs:['L','L'],cells:[{r:2,c:9},{r:2,c:10},{r:3,c:10},{r:4,c:10},{r:4,c:11},{r:5,c:11},{r:6,c:11},{r:7,c:11},{r:8,c:11},{r:8,c:10}]},
+  {id:3,color:'#fbbf24',dirs:['D','U'],cells:[{r:7,c:8},{r:6,c:8},{r:6,c:9},{r:5,c:9},{r:4,c:9},{r:3,c:9},{r:3,c:8},{r:2,c:8},{r:1,c:8},{r:1,c:9},{r:0,c:9}]},
+  {id:4,color:'#a78bfa',dirs:['U'],cells:[{r:10,c:9},{r:10,c:8},{r:11,c:8},{r:11,c:7},{r:11,c:6},{r:11,c:5},{r:11,c:4},{r:10,c:4},{r:9,c:4},{r:8,c:4}]},
+  {id:5,color:'#fb923c',dirs:['L'],cells:[{r:5,c:10},{r:6,c:10},{r:7,c:10},{r:7,c:9},{r:8,c:9},{r:9,c:9},{r:9,c:10},{r:10,c:10},{r:11,c:10},{r:11,c:11}]},
+  {id:6,color:'#34d399',dirs:['L','R'],cells:[{r:6,c:4},{r:7,c:4},{r:7,c:5},{r:7,c:6},{r:6,c:6},{r:6,c:7},{r:5,c:7},{r:5,c:8}]},
+  {id:7,color:'#f87171',dirs:['U','U'],cells:[{r:3,c:0},{r:3,c:1},{r:3,c:2},{r:3,c:3},{r:2,c:3},{r:1,c:3},{r:1,c:2},{r:1,c:1},{r:0,c:1}]},
+  {id:8,color:'#e879f9',dirs:['U'],cells:[{r:5,c:3},{r:5,c:2},{r:4,c:2},{r:4,c:1},{r:4,c:0},{r:5,c:0},{r:6,c:0},{r:7,c:0},{r:8,c:0},{r:9,c:0},{r:10,c:0},{r:10,c:1},{r:10,c:2}]},
+  {id:9,color:'#2dd4bf',dirs:['L','D'],cells:[{r:4,c:5},{r:3,c:5},{r:3,c:6},{r:2,c:6},{r:1,c:6},{r:1,c:5},{r:1,c:4},{r:2,c:4}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:7,c:10},{r:4,c:6}],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['D'],cells:[{r:5,c:11},{r:5,c:10},{r:5,c:9},{r:6,c:9},{r:7,c:9},{r:8,c:9},{r:8,c:8}]},
+  {id:1,color:'#60a5fa',dirs:['D','L'],cells:[{r:6,c:7},{r:6,c:8},{r:5,c:8},{r:4,c:8},{r:4,c:7},{r:3,c:7},{r:3,c:6},{r:2,c:6},{r:2,c:5},{r:2,c:4},{r:2,c:3}]},
+  {id:2,color:'#4ade80',dirs:['L','R'],cells:[{r:8,c:1},{r:7,c:1},{r:7,c:0},{r:6,c:0},{r:5,c:0},{r:4,c:0},{r:3,c:0},{r:2,c:0},{r:2,c:1}]},
+  {id:3,color:'#fbbf24',dirs:['L','L'],cells:[{r:2,c:8},{r:1,c:8},{r:1,c:9},{r:0,c:9},{r:0,c:10},{r:0,c:11},{r:1,c:11},{r:2,c:11},{r:3,c:11},{r:4,c:11},{r:4,c:10},{r:4,c:9}]},
+  {id:4,color:'#a78bfa',dirs:['D','U'],cells:[{r:11,c:1},{r:11,c:2},{r:10,c:2},{r:10,c:3},{r:10,c:4},{r:10,c:5},{r:9,c:5}]},
+  {id:5,color:'#fb923c',dirs:['L','D'],cells:[{r:9,c:1},{r:9,c:2},{r:8,c:2},{r:7,c:2},{r:7,c:3},{r:6,c:3},{r:6,c:4},{r:5,c:4},{r:5,c:5},{r:5,c:6},{r:6,c:6},{r:7,c:6}]},
+  {id:6,color:'#34d399',dirs:['L','D'],cells:[{r:1,c:1},{r:1,c:2},{r:0,c:2},{r:0,c:3},{r:0,c:4},{r:0,c:5},{r:0,c:6},{r:1,c:6},{r:1,c:7},{r:2,c:7}]},
+  {id:7,color:'#f87171',dirs:['D'],cells:[{r:9,c:8},{r:9,c:9},{r:10,c:9},{r:11,c:9},{r:11,c:10},{r:11,c:11},{r:10,c:11},{r:9,c:11},{r:8,c:11}]},
+  {id:8,color:'#e879f9',dirs:['L','U'],cells:[{r:6,c:1},{r:6,c:2},{r:5,c:2},{r:5,c:3},{r:4,c:3},{r:3,c:3},{r:3,c:2},{r:2,c:2}]},
+  {id:9,color:'#2dd4bf',dirs:['L','L'],cells:[{r:7,c:5},{r:8,c:5},{r:8,c:6},{r:8,c:7},{r:9,c:7},{r:10,c:7},{r:10,c:6},{r:11,c:6},{r:11,c:5},{r:11,c:4}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:1,c:7},{r:9,c:8},{r:1,c:2}],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['L','U'],cells:[{r:4,c:9},{r:5,c:9},{r:5,c:8},{r:5,c:7},{r:4,c:7},{r:3,c:7},{r:3,c:8},{r:2,c:8},{r:1,c:8}]},
+  {id:1,color:'#60a5fa',dirs:['L','D'],cells:[{r:2,c:5},{r:3,c:5},{r:3,c:6},{r:4,c:6},{r:5,c:6},{r:5,c:5},{r:5,c:4},{r:5,c:3},{r:5,c:2},{r:6,c:2},{r:7,c:2}]},
+  {id:2,color:'#4ade80',dirs:['U'],cells:[{r:6,c:5},{r:6,c:6},{r:6,c:7},{r:6,c:8},{r:7,c:8},{r:8,c:8},{r:8,c:7},{r:9,c:7},{r:10,c:7},{r:10,c:8}]},
+  {id:3,color:'#fbbf24',dirs:['L','R'],cells:[{r:7,c:6},{r:8,c:6},{r:9,c:6},{r:10,c:6},{r:11,c:6},{r:11,c:7},{r:11,c:8},{r:11,c:9}]},
+  {id:4,color:'#a78bfa',dirs:['L'],cells:[{r:2,c:6},{r:1,c:6},{r:0,c:6},{r:0,c:7},{r:0,c:8},{r:0,c:9},{r:0,c:10}]},
+  {id:5,color:'#fb923c',dirs:['R','L'],cells:[{r:4,c:4},{r:4,c:3},{r:3,c:3},{r:2,c:3},{r:2,c:4},{r:1,c:4},{r:0,c:4},{r:0,c:3},{r:0,c:2},{r:0,c:1},{r:1,c:1},{r:1,c:0}]},
+  {id:6,color:'#34d399',dirs:['D','U'],cells:[{r:11,c:11},{r:10,c:11},{r:9,c:11},{r:9,c:10},{r:9,c:9},{r:8,c:9},{r:7,c:9},{r:7,c:10},{r:6,c:10},{r:5,c:10},{r:4,c:10}]},
+  {id:7,color:'#f87171',dirs:['R'],cells:[{r:6,c:4},{r:7,c:4},{r:7,c:3},{r:8,c:3},{r:8,c:2},{r:9,c:2},{r:9,c:1},{r:9,c:0},{r:10,c:0},{r:11,c:0}]},
+  {id:8,color:'#e879f9',dirs:['U','U'],cells:[{r:6,c:0},{r:6,c:1},{r:5,c:1},{r:4,c:1},{r:4,c:2},{r:3,c:2},{r:2,c:2}]},
+  {id:9,color:'#2dd4bf',dirs:['D','D'],cells:[{r:11,c:4},{r:11,c:3},{r:10,c:3},{r:9,c:3},{r:9,c:4},{r:9,c:5},{r:10,c:5}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:10,c:2},{r:6,c:10},{r:6,c:9}],
+  bouncers:[{r:1,c:1}],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['U','R'],cells:[{r:1,c:3},{r:1,c:2},{r:0,c:2},{r:0,c:1},{r:0,c:0},{r:1,c:0},{r:2,c:0},{r:2,c:1},{r:3,c:1},{r:3,c:2}]},
+  {id:1,color:'#60a5fa',dirs:['L','R'],cells:[{r:4,c:1},{r:4,c:2},{r:4,c:3},{r:4,c:4},{r:3,c:4},{r:2,c:4},{r:1,c:4},{r:1,c:5},{r:1,c:6},{r:0,c:6},{r:0,c:7},{r:0,c:8}]},
+  {id:2,color:'#4ade80',dirs:['R','R'],cells:[{r:5,c:3},{r:6,c:3},{r:6,c:4},{r:6,c:5},{r:7,c:5},{r:7,c:6},{r:7,c:7},{r:6,c:7},{r:5,c:7},{r:5,c:8}]},
+  {id:3,color:'#fbbf24',dirs:['L'],cells:[{r:8,c:10},{r:8,c:11},{r:7,c:11},{r:6,c:11},{r:5,c:11},{r:5,c:10},{r:5,c:9}]},
+  {id:4,color:'#a78bfa',dirs:['D','U'],cells:[{r:9,c:7},{r:9,c:6},{r:10,c:6},{r:10,c:5},{r:11,c:5},{r:11,c:4},{r:11,c:3},{r:10,c:3}]},
+  {id:5,color:'#fb923c',dirs:['R','L'],cells:[{r:7,c:9},{r:7,c:8},{r:8,c:8},{r:8,c:7},{r:8,c:6},{r:8,c:5},{r:9,c:5},{r:9,c:4}]},
+  {id:6,color:'#34d399',dirs:['L'],cells:[{r:4,c:5},{r:3,c:5},{r:2,c:5},{r:2,c:6},{r:2,c:7},{r:1,c:7},{r:1,c:8},{r:1,c:9},{r:2,c:9},{r:3,c:9},{r:3,c:8},{r:4,c:8}]},
+  {id:7,color:'#f87171',dirs:['L','U'],cells:[{r:9,c:8},{r:10,c:8},{r:10,c:9},{r:11,c:9},{r:11,c:10},{r:11,c:11},{r:10,c:11},{r:9,c:11}]},
+  {id:8,color:'#e879f9',dirs:['D','D'],cells:[{r:9,c:1},{r:9,c:0},{r:8,c:0},{r:7,c:0},{r:6,c:0},{r:6,c:1},{r:6,c:2},{r:7,c:2},{r:7,c:3},{r:7,c:4},{r:8,c:4}]},
+  {id:9,color:'#2dd4bf',dirs:['U'],cells:[{r:4,c:11},{r:4,c:10},{r:3,c:10},{r:2,c:10},{r:2,c:11},{r:1,c:11},{r:0,c:11},{r:0,c:10},{r:0,c:9}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:10,c:6},{r:1,c:6},{r:10,c:2}],
+  bouncers:[{r:3,c:10}],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['L','D'],cells:[{r:2,c:8},{r:3,c:8},{r:4,c:8},{r:4,c:7},{r:5,c:7},{r:5,c:6},{r:6,c:6}]},
+  {id:1,color:'#60a5fa',dirs:['D'],cells:[{r:7,c:11},{r:7,c:10},{r:6,c:10},{r:6,c:9},{r:5,c:9},{r:4,c:9},{r:4,c:10},{r:4,c:11},{r:3,c:11},{r:2,c:11},{r:1,c:11},{r:0,c:11}]},
+  {id:2,color:'#4ade80',dirs:['U'],cells:[{r:10,c:8},{r:10,c:7},{r:11,c:7},{r:11,c:6},{r:11,c:5},{r:11,c:4},{r:10,c:4},{r:9,c:4}]},
+  {id:3,color:'#fbbf24',dirs:['U'],cells:[{r:6,c:0},{r:6,c:1},{r:5,c:1},{r:4,c:1},{r:4,c:0},{r:3,c:0},{r:2,c:0},{r:2,c:1}]},
+  {id:4,color:'#a78bfa',dirs:['U','R'],cells:[{r:7,c:3},{r:7,c:4},{r:8,c:4},{r:8,c:5},{r:8,c:6},{r:7,c:6},{r:7,c:7},{r:7,c:8}]},
+  {id:5,color:'#fb923c',dirs:['D','R'],cells:[{r:11,c:1},{r:11,c:0},{r:10,c:0},{r:9,c:0},{r:9,c:1},{r:8,c:1},{r:8,c:2},{r:7,c:2},{r:6,c:2},{r:6,c:3}]},
+  {id:6,color:'#34d399',dirs:['R'],cells:[{r:1,c:9},{r:1,c:8},{r:1,c:7},{r:0,c:7},{r:0,c:6},{r:0,c:5},{r:0,c:4},{r:0,c:3},{r:0,c:2}]},
+  {id:7,color:'#f87171',dirs:['R','D'],cells:[{r:10,c:11},{r:9,c:11},{r:8,c:11},{r:8,c:10},{r:8,c:9},{r:9,c:9},{r:9,c:8},{r:9,c:7},{r:9,c:6},{r:9,c:5},{r:10,c:5}]},
+  {id:8,color:'#e879f9',dirs:['L','U'],cells:[{r:2,c:4},{r:3,c:4},{r:4,c:4},{r:5,c:4},{r:5,c:3},{r:5,c:2},{r:4,c:2},{r:3,c:2},{r:2,c:2},{r:1,c:2}]},
+  {id:9,color:'#2dd4bf',dirs:['D','D'],cells:[{r:6,c:4},{r:6,c:5},{r:5,c:5},{r:4,c:5},{r:3,c:5},{r:2,c:5},{r:1,c:5},{r:1,c:4},{r:1,c:3},{r:2,c:3}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:4,c:7},{r:8,c:1},{r:2,c:4}],
+  bouncers:[{r:9,c:2}],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['U','D'],cells:[{r:2,c:6},{r:2,c:5},{r:3,c:5},{r:4,c:5},{r:4,c:6},{r:5,c:6},{r:5,c:7},{r:6,c:7}]},
+  {id:1,color:'#60a5fa',dirs:['U','R'],cells:[{r:0,c:11},{r:0,c:10},{r:0,c:9},{r:1,c:9},{r:2,c:9},{r:3,c:9},{r:3,c:10},{r:3,c:11}]},
+  {id:2,color:'#4ade80',dirs:['U'],cells:[{r:6,c:9},{r:6,c:10},{r:6,c:11},{r:7,c:11},{r:8,c:11},{r:8,c:10},{r:9,c:10},{r:9,c:9},{r:10,c:9}]},
+  {id:3,color:'#fbbf24',dirs:['D','D'],cells:[{r:1,c:3},{r:1,c:4},{r:0,c:4},{r:0,c:5},{r:0,c:6},{r:0,c:7},{r:0,c:8},{r:1,c:8},{r:2,c:8}]},
+  {id:4,color:'#a78bfa',dirs:['U','U'],cells:[{r:10,c:5},{r:11,c:5},{r:11,c:4},{r:11,c:3},{r:11,c:2},{r:10,c:2},{r:10,c:1},{r:9,c:1},{r:9,c:0},{r:8,c:0},{r:7,c:0}]},
+  {id:5,color:'#fb923c',dirs:['R'],cells:[{r:9,c:3},{r:8,c:3},{r:8,c:2},{r:7,c:2},{r:7,c:1},{r:6,c:1},{r:6,c:0},{r:5,c:0},{r:4,c:0},{r:3,c:0},{r:3,c:1}]},
+  {id:6,color:'#34d399',dirs:['U'],cells:[{r:2,c:0},{r:2,c:1},{r:2,c:2},{r:3,c:2},{r:3,c:3},{r:4,c:3},{r:5,c:3},{r:5,c:2},{r:6,c:2}]},
+  {id:7,color:'#f87171',dirs:['R','D'],cells:[{r:4,c:10},{r:4,c:9},{r:4,c:8},{r:5,c:8},{r:6,c:8},{r:7,c:8},{r:7,c:7},{r:8,c:7},{r:9,c:7},{r:10,c:7}]},
+  {id:8,color:'#e879f9',dirs:['R','D'],cells:[{r:3,c:4},{r:4,c:4},{r:5,c:4},{r:5,c:5},{r:6,c:5},{r:6,c:6},{r:7,c:6},{r:8,c:6},{r:9,c:6},{r:10,c:6}]},
+  {id:9,color:'#2dd4bf',dirs:['R','U'],cells:[{r:8,c:9},{r:8,c:8},{r:9,c:8},{r:10,c:8},{r:11,c:8},{r:11,c:9},{r:11,c:10},{r:10,c:10},{r:10,c:11},{r:9,c:11}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:9,c:6},{r:3,c:7},{r:2,c:7},{r:8,c:5}],
+  bouncers:[{r:5,c:6}],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['U'],cells:[{r:5,c:2},{r:6,c:2},{r:6,c:3},{r:7,c:3},{r:7,c:4},{r:7,c:5},{r:6,c:5},{r:5,c:5},{r:5,c:4},{r:4,c:4},{r:3,c:4},{r:3,c:5},{r:3,c:6}]},
+  {id:1,color:'#60a5fa',dirs:['L'],cells:[{r:6,c:1},{r:7,c:1},{r:7,c:2},{r:8,c:2},{r:9,c:2},{r:9,c:1},{r:9,c:0},{r:10,c:0},{r:11,c:0},{r:11,c:1},{r:11,c:2},{r:11,c:3},{r:11,c:4}]},
+  {id:2,color:'#4ade80',dirs:['L','D'],cells:[{r:4,c:5},{r:4,c:6},{r:4,c:7},{r:4,c:8},{r:4,c:9},{r:5,c:9},{r:6,c:9},{r:6,c:10},{r:7,c:10}]},
+  {id:3,color:'#fbbf24',dirs:['U','D'],cells:[{r:2,c:6},{r:2,c:5},{r:2,c:4},{r:1,c:4},{r:0,c:4},{r:0,c:3},{r:0,c:2},{r:1,c:2},{r:2,c:2}]},
+  {id:4,color:'#a78bfa',dirs:['R'],cells:[{r:10,c:7},{r:11,c:7},{r:11,c:8},{r:11,c:9},{r:11,c:10},{r:11,c:11},{r:10,c:11},{r:9,c:11},{r:9,c:10},{r:8,c:10},{r:8,c:9},{r:8,c:8}]},
+  {id:5,color:'#fb923c',dirs:['R','D'],cells:[{r:2,c:8},{r:3,c:8},{r:3,c:9},{r:3,c:10},{r:4,c:10},{r:5,c:10},{r:5,c:11},{r:6,c:11},{r:7,c:11}]},
+  {id:6,color:'#34d399',dirs:['R','R'],cells:[{r:10,c:9},{r:10,c:8},{r:9,c:8},{r:9,c:7},{r:8,c:7},{r:7,c:7},{r:7,c:8},{r:7,c:9}]},
+  {id:7,color:'#f87171',dirs:['R'],cells:[{r:0,c:1},{r:1,c:1},{r:1,c:0},{r:2,c:0},{r:3,c:0},{r:4,c:0},{r:4,c:1},{r:4,c:2},{r:3,c:2}]},
+  {id:8,color:'#e879f9',dirs:['U','U'],cells:[{r:0,c:8},{r:1,c:8},{r:1,c:9},{r:2,c:9},{r:2,c:10},{r:2,c:11},{r:1,c:11},{r:0,c:11}]},
+  {id:9,color:'#2dd4bf',dirs:['U','R'],cells:[{r:10,c:1},{r:10,c:2},{r:10,c:3},{r:9,c:3},{r:9,c:4},{r:9,c:5},{r:10,c:5},{r:10,c:6}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:8,c:3},{r:1,c:4},{r:2,c:9},{r:4,c:5}],
+  bouncers:[{r:10,c:3},{r:1,c:10}],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['D','L'],cells:[{r:0,c:8},{r:0,c:7},{r:1,c:7},{r:1,c:6},{r:2,c:6},{r:2,c:5},{r:2,c:4},{r:3,c:4},{r:3,c:3},{r:3,c:2},{r:4,c:2},{r:4,c:1}]},
+  {id:1,color:'#60a5fa',dirs:['D','U'],cells:[{r:5,c:4},{r:5,c:3},{r:6,c:3},{r:6,c:2},{r:6,c:1},{r:5,c:1},{r:5,c:0},{r:4,c:0},{r:3,c:0}]},
+  {id:2,color:'#4ade80',dirs:['L','D'],cells:[{r:3,c:9},{r:4,c:9},{r:4,c:8},{r:4,c:7},{r:4,c:6},{r:5,c:6},{r:6,c:6},{r:6,c:5},{r:7,c:5}]},
+  {id:3,color:'#fbbf24',dirs:['L','D'],cells:[{r:3,c:7},{r:3,c:8},{r:2,c:8},{r:1,c:8},{r:1,c:9},{r:0,c:9},{r:0,c:10},{r:0,c:11},{r:1,c:11},{r:2,c:11}]},
+  {id:4,color:'#a78bfa',dirs:['R','D'],cells:[{r:5,c:7},{r:6,c:7},{r:6,c:8},{r:7,c:8},{r:8,c:8},{r:8,c:7},{r:9,c:7},{r:9,c:6},{r:9,c:5},{r:10,c:5}]},
+  {id:5,color:'#fb923c',dirs:['D'],cells:[{r:8,c:0},{r:8,c:1},{r:8,c:2},{r:9,c:2},{r:9,c:3},{r:9,c:4},{r:10,c:4},{r:11,c:4},{r:11,c:3},{r:11,c:2},{r:11,c:1},{r:10,c:1},{r:10,c:0}]},
+  {id:6,color:'#34d399',dirs:['L','R'],cells:[{r:6,c:10},{r:7,c:10},{r:7,c:11},{r:8,c:11},{r:9,c:11},{r:10,c:11},{r:10,c:10},{r:11,c:10},{r:11,c:9},{r:11,c:8},{r:10,c:8},{r:9,c:8},{r:9,c:9}]},
+  {id:7,color:'#f87171',dirs:['D','D'],cells:[{r:8,c:10},{r:8,c:9},{r:7,c:9},{r:6,c:9},{r:5,c:9},{r:5,c:10},{r:5,c:11},{r:6,c:11}]},
+  {id:8,color:'#e879f9',dirs:['D','U'],cells:[{r:7,c:7},{r:7,c:6},{r:8,c:6},{r:8,c:5},{r:8,c:4},{r:7,c:4},{r:6,c:4}]},
+  {id:9,color:'#2dd4bf',dirs:['R'],cells:[{r:0,c:2},{r:0,c:1},{r:0,c:0},{r:1,c:0},{r:2,c:0},{r:2,c:1},{r:2,c:2},{r:2,c:3}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:4,c:5},{r:10,c:2},{r:3,c:7},{r:4,c:4}],
+  bouncers:[{r:10,c:10},{r:4,c:1}],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['D','L'],cells:[{r:5,c:4},{r:5,c:5},{r:6,c:5},{r:7,c:5},{r:7,c:4},{r:8,c:4},{r:8,c:3},{r:9,c:3},{r:9,c:2}]},
+  {id:1,color:'#60a5fa',dirs:['L','L'],cells:[{r:5,c:7},{r:6,c:7},{r:6,c:6},{r:7,c:6},{r:8,c:6},{r:9,c:6},{r:9,c:5},{r:9,c:4},{r:10,c:4},{r:10,c:3}]},
+  {id:2,color:'#4ade80',dirs:['U'],cells:[{r:2,c:6},{r:2,c:5},{r:1,c:5},{r:0,c:5},{r:0,c:4},{r:0,c:3},{r:1,c:3},{r:1,c:2}]},
+  {id:3,color:'#fbbf24',dirs:['L','D'],cells:[{r:1,c:8},{r:0,c:8},{r:0,c:9},{r:0,c:10},{r:1,c:10},{r:2,c:10},{r:3,c:10},{r:3,c:9},{r:4,c:9},{r:5,c:9}]},
+  {id:4,color:'#a78bfa',dirs:['R','D'],cells:[{r:6,c:2},{r:7,c:2},{r:7,c:1},{r:8,c:1},{r:8,c:0},{r:9,c:0},{r:10,c:0}]},
+  {id:5,color:'#fb923c',dirs:['U'],cells:[{r:4,c:2},{r:5,c:2},{r:5,c:1},{r:5,c:0},{r:4,c:0},{r:3,c:0},{r:2,c:0}]},
+  {id:6,color:'#34d399',dirs:['D','L'],cells:[{r:4,c:7},{r:4,c:6},{r:3,c:6},{r:3,c:5},{r:3,c:4},{r:3,c:3},{r:3,c:2},{r:2,c:2},{r:2,c:1},{r:1,c:1},{r:0,c:1},{r:0,c:0}]},
+  {id:7,color:'#f87171',dirs:['L','U'],cells:[{r:11,c:0},{r:11,c:1},{r:11,c:2},{r:11,c:3},{r:11,c:4},{r:11,c:5},{r:10,c:5},{r:10,c:6},{r:10,c:7},{r:10,c:8},{r:9,c:8}]},
+  {id:8,color:'#e879f9',dirs:['U','U'],cells:[{r:5,c:10},{r:5,c:11},{r:6,c:11},{r:7,c:11},{r:7,c:10},{r:8,c:10},{r:8,c:9},{r:8,c:8},{r:7,c:8},{r:6,c:8},{r:5,c:8},{r:4,c:8}]},
+  {id:9,color:'#2dd4bf',dirs:['L'],cells:[{r:11,c:11},{r:10,c:11},{r:9,c:11},{r:9,c:10},{r:9,c:9},{r:10,c:9},{r:11,c:9},{r:11,c:8},{r:11,c:7}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:8,c:9},{r:9,c:2},{r:6,c:10},{r:6,c:4}],
+  bouncers:[{r:1,c:2},{r:4,c:10}],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['R','U'],cells:[{r:7,c:5},{r:6,c:5},{r:5,c:5},{r:5,c:6},{r:4,c:6},{r:3,c:6},{r:3,c:7},{r:3,c:8},{r:2,c:8},{r:1,c:8},{r:0,c:8}]},
+  {id:1,color:'#60a5fa',dirs:['L','L'],cells:[{r:4,c:9},{r:3,c:9},{r:3,c:10},{r:2,c:10},{r:2,c:11},{r:1,c:11},{r:0,c:11},{r:0,c:10},{r:0,c:9}]},
+  {id:2,color:'#4ade80',dirs:['R','R'],cells:[{r:1,c:3},{r:2,c:3},{r:2,c:2},{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:4,c:0},{r:5,c:0},{r:6,c:0},{r:6,c:1}]},
+  {id:3,color:'#fbbf24',dirs:['D','R'],cells:[{r:11,c:2},{r:10,c:2},{r:10,c:3},{r:9,c:3},{r:9,c:4},{r:9,c:5},{r:8,c:5},{r:8,c:6}]},
+  {id:4,color:'#a78bfa',dirs:['L','U'],cells:[{r:8,c:4},{r:7,c:4},{r:7,c:3},{r:6,c:3},{r:5,c:3},{r:5,c:4},{r:4,c:4}]},
+  {id:5,color:'#fb923c',dirs:['D'],cells:[{r:11,c:0},{r:10,c:0},{r:10,c:1},{r:9,c:1},{r:8,c:1},{r:8,c:2},{r:7,c:2},{r:6,c:2},{r:5,c:2},{r:4,c:2},{r:4,c:3}]},
+  {id:6,color:'#34d399',dirs:['U'],cells:[{r:0,c:4},{r:0,c:5},{r:0,c:6},{r:0,c:7},{r:1,c:7},{r:2,c:7},{r:2,c:6},{r:2,c:5},{r:3,c:5},{r:3,c:4},{r:3,c:3},{r:3,c:2}]},
+  {id:7,color:'#f87171',dirs:['U','R'],cells:[{r:5,c:9},{r:5,c:10},{r:5,c:11},{r:6,c:11},{r:7,c:11},{r:7,c:10},{r:7,c:9},{r:7,c:8},{r:6,c:8},{r:6,c:7},{r:5,c:7},{r:4,c:7},{r:4,c:8}]},
+  {id:8,color:'#e879f9',dirs:['U','L'],cells:[{r:8,c:7},{r:8,c:8},{r:9,c:8},{r:10,c:8},{r:10,c:9},{r:10,c:10},{r:10,c:11},{r:9,c:11},{r:8,c:11},{r:8,c:10}]},
+  {id:9,color:'#2dd4bf',dirs:['R','R'],cells:[{r:9,c:7},{r:9,c:6},{r:10,c:6},{r:11,c:6},{r:11,c:7},{r:11,c:8},{r:11,c:9},{r:11,c:10},{r:11,c:11}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:6,c:8},{r:9,c:8},{r:10,c:4},{r:10,c:3},{r:9,c:7}],
+  bouncers:[{r:3,c:1},{r:10,c:8}],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['L'],cells:[{r:6,c:0},{r:5,c:0},{r:4,c:0},{r:3,c:0},{r:2,c:0},{r:2,c:1},{r:2,c:2},{r:3,c:2},{r:3,c:3}]},
+  {id:1,color:'#60a5fa',dirs:['D','L'],cells:[{r:1,c:10},{r:0,c:10},{r:0,c:9},{r:0,c:8},{r:1,c:8},{r:2,c:8},{r:2,c:7},{r:2,c:6}]},
+  {id:2,color:'#4ade80',dirs:['L'],cells:[{r:7,c:3},{r:6,c:3},{r:6,c:2},{r:6,c:1},{r:7,c:1},{r:8,c:1},{r:8,c:2},{r:9,c:2},{r:9,c:3}]},
+  {id:3,color:'#fbbf24',dirs:['U','R'],cells:[{r:2,c:11},{r:2,c:10},{r:3,c:10},{r:4,c:10},{r:4,c:9},{r:5,c:9},{r:6,c:9},{r:7,c:9},{r:7,c:10}]},
+  {id:4,color:'#a78bfa',dirs:['L','D'],cells:[{r:5,c:10},{r:6,c:10},{r:6,c:11},{r:7,c:11},{r:8,c:11},{r:8,c:10},{r:9,c:10}]},
+  {id:5,color:'#fb923c',dirs:['R','D'],cells:[{r:0,c:1},{r:1,c:1},{r:1,c:2},{r:1,c:3},{r:2,c:3},{r:2,c:4},{r:2,c:5},{r:3,c:5}]},
+  {id:6,color:'#34d399',dirs:['L','D'],cells:[{r:11,c:7},{r:11,c:8},{r:11,c:9},{r:10,c:9},{r:9,c:9},{r:8,c:9},{r:8,c:8},{r:8,c:7},{r:8,c:6},{r:9,c:6},{r:9,c:5},{r:10,c:5}]},
+  {id:7,color:'#f87171',dirs:['L','R'],cells:[{r:8,c:0},{r:9,c:0},{r:9,c:1},{r:10,c:1},{r:10,c:2},{r:11,c:2},{r:11,c:3},{r:11,c:4},{r:11,c:5}]},
+  {id:8,color:'#e879f9',dirs:['R','U'],cells:[{r:7,c:5},{r:7,c:4},{r:6,c:4},{r:5,c:4},{r:4,c:4},{r:4,c:5},{r:4,c:6},{r:3,c:6},{r:3,c:7},{r:3,c:8},{r:3,c:9},{r:2,c:9}]},
+  {id:9,color:'#2dd4bf',dirs:['U'],cells:[{r:0,c:7},{r:0,c:6},{r:1,c:6},{r:1,c:5},{r:1,c:4},{r:0,c:4},{r:0,c:3},{r:0,c:2}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:3,c:2},{r:9,c:9},{r:7,c:2},{r:6,c:4},{r:5,c:2}],
+  bouncers:[{r:1,c:10},{r:4,c:6},{r:10,c:9}],
+  tunnels:[[{r:11,c:8},{r:0,c:5}]],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['R','R'],cells:[{r:8,c:1},{r:7,c:1},{r:6,c:1},{r:6,c:2},{r:6,c:3},{r:5,c:3},{r:5,c:4},{r:5,c:5},{r:4,c:5},{r:3,c:5},{r:3,c:6},{r:3,c:7}]},
+  {id:1,color:'#60a5fa',dirs:['L','D'],cells:[{r:5,c:0},{r:6,c:0},{r:7,c:0},{r:8,c:0},{r:9,c:0},{r:10,c:0},{r:10,c:1},{r:11,c:1}]},
+  {id:2,color:'#4ade80',dirs:['R','R'],cells:[{r:8,c:3},{r:7,c:3},{r:7,c:4},{r:7,c:5},{r:6,c:5},{r:6,c:6},{r:5,c:6},{r:5,c:7},{r:5,c:8},{r:5,c:9},{r:5,c:10}]},
+  {id:3,color:'#fbbf24',dirs:['R','L'],cells:[{r:4,c:8},{r:3,c:8},{r:3,c:9},{r:2,c:9},{r:1,c:9},{r:1,c:8},{r:0,c:8},{r:0,c:7},{r:0,c:6}]},
+  {id:4,color:'#a78bfa',dirs:['U','R'],cells:[{r:10,c:5},{r:10,c:6},{r:9,c:6},{r:8,c:6},{r:7,c:6},{r:7,c:7},{r:6,c:7},{r:6,c:8},{r:6,c:9},{r:6,c:10}]},
+  {id:5,color:'#fb923c',dirs:['R'],cells:[{r:0,c:3},{r:0,c:2},{r:1,c:2},{r:2,c:2},{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:4,c:2},{r:4,c:3},{r:4,c:4},{r:3,c:4},{r:2,c:4}]},
+  {id:6,color:'#34d399',dirs:['U','D'],cells:[{r:5,c:11},{r:6,c:11},{r:7,c:11},{r:7,c:10},{r:7,c:9},{r:8,c:9},{r:8,c:8},{r:9,c:8},{r:9,c:7},{r:10,c:7},{r:11,c:7}]},
+  {id:7,color:'#f87171',dirs:['L','R'],cells:[{r:2,c:3},{r:1,c:3},{r:1,c:4},{r:1,c:5},{r:1,c:6},{r:2,c:6},{r:2,c:7},{r:2,c:8}]},
+  {id:8,color:'#e879f9',dirs:['D','L'],cells:[{r:4,c:11},{r:4,c:10},{r:3,c:10},{r:2,c:10},{r:2,c:11},{r:1,c:11},{r:0,c:11},{r:0,c:10}]},
+  {id:9,color:'#2dd4bf',dirs:['L','L'],cells:[{r:11,c:2},{r:11,c:3},{r:11,c:4},{r:10,c:4},{r:9,c:4},{r:9,c:3},{r:9,c:2},{r:9,c:1}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:2,c:8},{r:8,c:10},{r:4,c:9},{r:2,c:7},{r:10,c:10}],
+  bouncers:[{r:2,c:9},{r:5,c:9},{r:6,c:7}],
+  tunnels:[[{r:10,c:4},{r:6,c:11}]],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['R','U'],cells:[{r:9,c:7},{r:10,c:7},{r:10,c:8},{r:11,c:8},{r:11,c:9},{r:11,c:10},{r:11,c:11},{r:10,c:11},{r:9,c:11}]},
+  {id:1,color:'#60a5fa',dirs:['L'],cells:[{r:3,c:7},{r:3,c:8},{r:4,c:8},{r:5,c:8},{r:5,c:7},{r:5,c:6},{r:6,c:6},{r:6,c:5},{r:6,c:4},{r:7,c:4},{r:8,c:4},{r:8,c:5}]},
+  {id:2,color:'#4ade80',dirs:['U','L'],cells:[{r:0,c:10},{r:0,c:9},{r:0,c:8},{r:1,c:8},{r:1,c:7},{r:1,c:6},{r:2,c:6},{r:3,c:6},{r:3,c:5}]},
+  {id:3,color:'#fbbf24',dirs:['R','U'],cells:[{r:7,c:7},{r:8,c:7},{r:8,c:8},{r:8,c:9},{r:7,c:9},{r:6,c:9},{r:6,c:10},{r:5,c:10},{r:4,c:10},{r:4,c:11},{r:3,c:11},{r:2,c:11}]},
+  {id:4,color:'#a78bfa',dirs:['L','U'],cells:[{r:8,c:0},{r:7,c:0},{r:6,c:0},{r:5,c:0},{r:4,c:0},{r:4,c:1},{r:3,c:1}]},
+  {id:5,color:'#fb923c',dirs:['R'],cells:[{r:11,c:1},{r:11,c:0},{r:10,c:0},{r:9,c:0},{r:9,c:1},{r:8,c:1},{r:8,c:2},{r:8,c:3}]},
+  {id:6,color:'#34d399',dirs:['U','U'],cells:[{r:4,c:3},{r:4,c:4},{r:3,c:4},{r:2,c:4},{r:2,c:5},{r:1,c:5},{r:0,c:5}]},
+  {id:7,color:'#f87171',dirs:['L'],cells:[{r:7,c:5},{r:7,c:6},{r:8,c:6},{r:9,c:6},{r:9,c:5},{r:9,c:4},{r:9,c:3}]},
+  {id:8,color:'#e879f9',dirs:['D'],cells:[{r:2,c:0},{r:1,c:0},{r:1,c:1},{r:0,c:1},{r:0,c:2},{r:0,c:3},{r:1,c:3},{r:2,c:3},{r:3,c:3},{r:3,c:2},{r:4,c:2},{r:5,c:2}]},
+  {id:9,color:'#2dd4bf',dirs:['R','U'],cells:[{r:5,c:5},{r:5,c:4},{r:5,c:3},{r:6,c:3},{r:7,c:3},{r:7,c:2},{r:7,c:1},{r:6,c:1}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:6,c:10},{r:4,c:2},{r:7,c:5},{r:8,c:10},{r:9,c:10}],
+  bouncers:[{r:4,c:1},{r:6,c:9},{r:7,c:10}],
+  tunnels:[[{r:0,c:10},{r:2,c:8}]],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['D','L'],cells:[{r:3,c:11},{r:3,c:10},{r:4,c:10},{r:4,c:9},{r:5,c:9},{r:5,c:8},{r:5,c:7},{r:5,c:6}]},
+  {id:1,color:'#60a5fa',dirs:['R'],cells:[{r:10,c:6},{r:10,c:5},{r:10,c:4},{r:10,c:3},{r:10,c:2},{r:11,c:2},{r:11,c:1},{r:11,c:0},{r:10,c:0},{r:9,c:0}]},
+  {id:2,color:'#4ade80',dirs:['L','R'],cells:[{r:2,c:6},{r:1,c:6},{r:0,c:6},{r:0,c:7},{r:0,c:8},{r:1,c:8},{r:1,c:9},{r:2,c:9},{r:2,c:10},{r:2,c:11}]},
+  {id:3,color:'#fbbf24',dirs:['R','D'],cells:[{r:0,c:2},{r:0,c:1},{r:0,c:0},{r:1,c:0},{r:2,c:0},{r:3,c:0},{r:4,c:0},{r:5,c:0}]},
+  {id:4,color:'#a78bfa',dirs:['R','D'],cells:[{r:1,c:7},{r:2,c:7},{r:3,c:7},{r:4,c:7},{r:4,c:6},{r:4,c:5},{r:4,c:4},{r:5,c:4},{r:6,c:4}]},
+  {id:5,color:'#fb923c',dirs:['R','R'],cells:[{r:5,c:1},{r:6,c:1},{r:6,c:0},{r:7,c:0},{r:8,c:0},{r:8,c:1},{r:8,c:2},{r:8,c:3}]},
+  {id:6,color:'#34d399',dirs:['D','R'],cells:[{r:11,c:3},{r:11,c:4},{r:11,c:5},{r:11,c:6},{r:11,c:7},{r:11,c:8},{r:11,c:9}]},
+  {id:7,color:'#f87171',dirs:['L'],cells:[{r:3,c:1},{r:2,c:1},{r:1,c:1},{r:1,c:2},{r:1,c:3},{r:1,c:4},{r:2,c:4},{r:3,c:4}]},
+  {id:8,color:'#e879f9',dirs:['L','U'],cells:[{r:10,c:1},{r:9,c:1},{r:9,c:2},{r:9,c:3},{r:9,c:4},{r:9,c:5},{r:8,c:5},{r:8,c:6},{r:7,c:6}]},
+  {id:9,color:'#2dd4bf',dirs:['L','L'],cells:[{r:6,c:6},{r:6,c:7},{r:7,c:7},{r:7,c:8},{r:8,c:8},{r:9,c:8},{r:9,c:7}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:8,c:8},{r:5,c:8},{r:9,c:6},{r:3,c:9},{r:7,c:2},{r:7,c:6}],
+  bouncers:[{r:9,c:7},{r:5,c:5},{r:6,c:5}],
+  tunnels:[[{r:0,c:1},{r:8,c:11}]],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['L','D'],cells:[{r:5,c:3},{r:4,c:3},{r:4,c:4},{r:4,c:5},{r:4,c:6},{r:4,c:7},{r:5,c:7},{r:6,c:7}]},
+  {id:1,color:'#60a5fa',dirs:['R','L'],cells:[{r:6,c:11},{r:6,c:10},{r:7,c:10},{r:8,c:10},{r:8,c:9},{r:9,c:9},{r:9,c:8},{r:10,c:8},{r:10,c:7},{r:10,c:6}]},
+  {id:2,color:'#4ade80',dirs:['U','R'],cells:[{r:6,c:4},{r:7,c:4},{r:7,c:5},{r:8,c:5},{r:9,c:5},{r:10,c:5},{r:11,c:5},{r:11,c:6},{r:11,c:7},{r:11,c:8},{r:11,c:9}]},
+  {id:3,color:'#fbbf24',dirs:['L','U'],cells:[{r:8,c:6},{r:8,c:7},{r:7,c:7},{r:7,c:8},{r:7,c:9},{r:6,c:9},{r:5,c:9},{r:4,c:9},{r:4,c:8},{r:3,c:8},{r:2,c:8},{r:1,c:8}]},
+  {id:4,color:'#a78bfa',dirs:['D','U'],cells:[{r:6,c:1},{r:6,c:0},{r:5,c:0},{r:4,c:0},{r:3,c:0},{r:3,c:1},{r:2,c:1},{r:1,c:1},{r:1,c:0},{r:0,c:0}]},
+  {id:5,color:'#fb923c',dirs:['R','L'],cells:[{r:3,c:10},{r:2,c:10},{r:2,c:11},{r:1,c:11},{r:0,c:11},{r:0,c:10},{r:0,c:9},{r:0,c:8},{r:0,c:7},{r:0,c:6}]},
+  {id:6,color:'#34d399',dirs:['L','L'],cells:[{r:3,c:4},{r:3,c:5},{r:3,c:6},{r:3,c:7},{r:2,c:7},{r:1,c:7},{r:1,c:6},{r:1,c:5},{r:0,c:5},{r:0,c:4},{r:0,c:3},{r:0,c:2}]},
+  {id:7,color:'#f87171',dirs:['L','R'],cells:[{r:4,c:2},{r:3,c:2},{r:2,c:2},{r:1,c:2},{r:1,c:3},{r:1,c:4},{r:2,c:4},{r:2,c:5}]},
+  {id:8,color:'#e879f9',dirs:['D'],cells:[{r:8,c:3},{r:7,c:3},{r:6,c:3},{r:6,c:2},{r:5,c:2},{r:5,c:1},{r:4,c:1}]},
+  {id:9,color:'#2dd4bf',dirs:['L','L'],cells:[{r:8,c:1},{r:8,c:2},{r:9,c:2},{r:9,c:3},{r:9,c:4},{r:10,c:4},{r:11,c:4},{r:11,c:3}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['L','D'],cells:[{r:5,c:2},{r:5,c:3},{r:5,c:4},{r:6,c:4},{r:7,c:4},{r:8,c:4},{r:8,c:5},{r:9,c:5},{r:9,c:6},{r:10,c:6}]},
+  {id:1,color:'#60a5fa',dirs:['D','R'],cells:[{r:1,c:5},{r:1,c:6},{r:1,c:7},{r:1,c:8},{r:2,c:8},{r:3,c:8},{r:3,c:9}]},
+  {id:2,color:'#4ade80',dirs:['U','R'],cells:[{r:7,c:1},{r:8,c:1},{r:8,c:0},{r:9,c:0},{r:10,c:0},{r:11,c:0},{r:11,c:1},{r:11,c:2},{r:11,c:3},{r:10,c:3},{r:10,c:4}]},
+  {id:3,color:'#fbbf24',dirs:['L','U'],cells:[{r:9,c:8},{r:10,c:8},{r:10,c:9},{r:10,c:10},{r:10,c:11},{r:9,c:11},{r:8,c:11}]},
+  {id:4,color:'#a78bfa',dirs:['U'],cells:[{r:11,c:9},{r:11,c:8},{r:11,c:7},{r:10,c:7},{r:9,c:7},{r:8,c:7},{r:8,c:8}]},
+  {id:5,color:'#fb923c',dirs:['R','L'],cells:[{r:9,c:4},{r:9,c:3},{r:8,c:3},{r:7,c:3},{r:7,c:2},{r:6,c:2},{r:6,c:1},{r:5,c:1},{r:5,c:0}]},
+  {id:6,color:'#34d399',dirs:['U','D'],cells:[{r:0,c:0},{r:0,c:1},{r:0,c:2},{r:1,c:2},{r:2,c:2},{r:2,c:1},{r:2,c:0},{r:3,c:0}]},
+  {id:7,color:'#f87171',dirs:['D'],cells:[{r:4,c:10},{r:3,c:10},{r:2,c:10},{r:2,c:9},{r:1,c:9},{r:0,c:9},{r:0,c:8},{r:0,c:7},{r:0,c:6},{r:0,c:5}]},
+  {id:8,color:'#e879f9',dirs:['L','L'],cells:[{r:6,c:8},{r:6,c:9},{r:6,c:10},{r:7,c:10},{r:8,c:10},{r:9,c:10},{r:9,c:9}]},
+  {id:9,color:'#2dd4bf',dirs:['D','L'],cells:[{r:6,c:11},{r:5,c:11},{r:5,c:10},{r:5,c:9},{r:5,c:8},{r:4,c:8},{r:4,c:7},{r:3,c:7},{r:2,c:7},{r:2,c:6}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:4,c:3},{r:4,c:9},{r:8,c:3},{r:7,c:9},{r:5,c:9},{r:10,c:3}],
+  bouncers:[{r:10,c:2},{r:6,c:2},{r:6,c:1},{r:4,c:2}],
+  tunnels:[[{r:5,c:0},{r:4,c:0}],[{r:2,c:8},{r:6,c:0}]],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['D','U'],cells:[{r:9,c:1},{r:8,c:1},{r:8,c:2},{r:7,c:2},{r:7,c:3},{r:6,c:3},{r:5,c:3},{r:5,c:2},{r:5,c:1},{r:4,c:1}]},
+  {id:1,color:'#60a5fa',dirs:['U','D'],cells:[{r:1,c:0},{r:1,c:1},{r:0,c:1},{r:0,c:2},{r:0,c:3},{r:0,c:4},{r:1,c:4},{r:1,c:5},{r:1,c:6},{r:2,c:6},{r:3,c:6},{r:4,c:6},{r:5,c:6}]},
+  {id:2,color:'#4ade80',dirs:['U','R'],cells:[{r:8,c:10},{r:8,c:9},{r:9,c:9},{r:10,c:9},{r:10,c:10},{r:11,c:10},{r:11,c:11}]},
+  {id:3,color:'#fbbf24',dirs:['U','D'],cells:[{r:8,c:7},{r:8,c:8},{r:7,c:8},{r:6,c:8},{r:6,c:7},{r:6,c:6},{r:7,c:6},{r:7,c:5},{r:8,c:5},{r:9,c:5}]},
+  {id:4,color:'#a78bfa',dirs:['R','L'],cells:[{r:1,c:8},{r:0,c:8},{r:0,c:9},{r:0,c:10},{r:0,c:11},{r:1,c:11},{r:2,c:11},{r:2,c:10},{r:2,c:9},{r:3,c:9},{r:3,c:8}]},
+  {id:5,color:'#fb923c',dirs:['D','L'],cells:[{r:6,c:4},{r:5,c:4},{r:5,c:5},{r:4,c:5},{r:3,c:5},{r:2,c:5},{r:2,c:4},{r:2,c:3},{r:2,c:2},{r:3,c:2},{r:3,c:1}]},
+  {id:6,color:'#34d399',dirs:['L','R'],cells:[{r:9,c:0},{r:10,c:0},{r:10,c:1},{r:11,c:1},{r:11,c:2},{r:11,c:3},{r:11,c:4},{r:11,c:5},{r:10,c:5},{r:10,c:6}]},
+  {id:7,color:'#f87171',dirs:['U','L'],cells:[{r:5,c:8},{r:5,c:7},{r:4,c:7},{r:3,c:7},{r:2,c:7},{r:1,c:7},{r:0,c:7},{r:0,c:6}]},
+  {id:8,color:'#e879f9',dirs:['D','L'],cells:[{r:3,c:10},{r:3,c:11},{r:4,c:11},{r:5,c:11},{r:6,c:11},{r:7,c:11},{r:8,c:11},{r:9,c:11},{r:9,c:10}]},
+  {id:9,color:'#2dd4bf',dirs:['D'],cells:[{r:9,c:6},{r:9,c:7},{r:9,c:8},{r:10,c:8},{r:11,c:8},{r:11,c:7},{r:11,c:6}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:7,c:5},{r:4,c:5},{r:9,c:9},{r:9,c:1},{r:7,c:4},{r:4,c:4}],
+  bouncers:[{r:9,c:4},{r:1,c:5}],
+  tunnels:[[{r:10,c:10},{r:10,c:6}],[{r:6,c:5},{r:2,c:4}]],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['L','L'],cells:[{r:2,c:8},{r:2,c:9},{r:1,c:9},{r:0,c:9},{r:0,c:8},{r:0,c:7},{r:0,c:6},{r:1,c:6},{r:2,c:6},{r:2,c:5},{r:3,c:5},{r:3,c:4}]},
+  {id:1,color:'#60a5fa',dirs:['D'],cells:[{r:8,c:5},{r:8,c:4},{r:8,c:3},{r:7,c:3},{r:7,c:2},{r:7,c:1},{r:6,c:1},{r:6,c:0},{r:5,c:0}]},
+  {id:2,color:'#4ade80',dirs:['R','D'],cells:[{r:0,c:0},{r:1,c:0},{r:1,c:1},{r:1,c:2},{r:1,c:3},{r:2,c:3},{r:3,c:3},{r:4,c:3},{r:5,c:3}]},
+  {id:3,color:'#fbbf24',dirs:['R'],cells:[{r:1,c:11},{r:1,c:10},{r:2,c:10},{r:3,c:10},{r:4,c:10},{r:5,c:10},{r:6,c:10},{r:6,c:9},{r:7,c:9},{r:8,c:9},{r:8,c:10}]},
+  {id:4,color:'#a78bfa',dirs:['U','D'],cells:[{r:6,c:7},{r:7,c:7},{r:7,c:6},{r:8,c:6},{r:9,c:6},{r:9,c:5},{r:10,c:5},{r:11,c:5}]},
+  {id:5,color:'#fb923c',dirs:['D'],cells:[{r:6,c:3},{r:6,c:4},{r:5,c:4},{r:5,c:5},{r:5,c:6},{r:4,c:6},{r:3,c:6},{r:3,c:7},{r:3,c:8},{r:3,c:9},{r:4,c:9},{r:5,c:9},{r:5,c:8}]},
+  {id:6,color:'#34d399',dirs:['U','U'],cells:[{r:11,c:10},{r:11,c:11},{r:10,c:11},{r:9,c:11},{r:8,c:11},{r:7,c:11},{r:6,c:11},{r:5,c:11},{r:4,c:11},{r:3,c:11}]},
+  {id:7,color:'#f87171',dirs:['L','U'],cells:[{r:8,c:1},{r:8,c:2},{r:9,c:2},{r:9,c:3},{r:10,c:3},{r:11,c:3},{r:11,c:2},{r:11,c:1},{r:11,c:0},{r:10,c:0}]},
+  {id:8,color:'#e879f9',dirs:['D'],cells:[{r:2,c:2},{r:2,c:1},{r:2,c:0},{r:3,c:0},{r:4,c:0},{r:4,c:1},{r:5,c:1},{r:5,c:2},{r:6,c:2}]},
+  {id:9,color:'#2dd4bf',dirs:['L','R'],cells:[{r:6,c:8},{r:7,c:8},{r:8,c:8},{r:8,c:7},{r:9,c:7},{r:10,c:7},{r:10,c:8}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:2,c:5},{r:7,c:8},{r:4,c:2},{r:1,c:8},{r:4,c:1},{r:10,c:2}],
+  bouncers:[{r:2,c:8},{r:9,c:8},{r:8,c:2},{r:8,c:9}],
+  tunnels:[[{r:1,c:11},{r:2,c:10}],[{r:5,c:0},{r:4,c:0}]],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['R'],cells:[{r:4,c:11},{r:4,c:10},{r:4,c:9},{r:4,c:8},{r:5,c:8},{r:6,c:8},{r:6,c:7},{r:7,c:7},{r:7,c:6}]},
+  {id:1,color:'#60a5fa',dirs:['R'],cells:[{r:10,c:4},{r:10,c:3},{r:9,c:3},{r:8,c:3},{r:8,c:4},{r:7,c:4},{r:7,c:5},{r:6,c:5},{r:6,c:6}]},
+  {id:2,color:'#4ade80',dirs:['D','U'],cells:[{r:11,c:8},{r:10,c:8},{r:10,c:9},{r:10,c:10},{r:10,c:11},{r:9,c:11},{r:8,c:11}]},
+  {id:3,color:'#fbbf24',dirs:['L','L'],cells:[{r:9,c:7},{r:8,c:7},{r:8,c:6},{r:8,c:5},{r:9,c:5},{r:10,c:5},{r:11,c:5},{r:11,c:4},{r:11,c:3},{r:11,c:2}]},
+  {id:4,color:'#a78bfa',dirs:['R','R'],cells:[{r:3,c:11},{r:3,c:10},{r:3,c:9},{r:2,c:9},{r:1,c:9},{r:1,c:10},{r:0,c:10},{r:0,c:11}]},
+  {id:5,color:'#fb923c',dirs:['L','L'],cells:[{r:6,c:11},{r:5,c:11},{r:5,c:10},{r:5,c:9},{r:6,c:9},{r:7,c:9},{r:7,c:10},{r:8,c:10},{r:9,c:10},{r:9,c:9}]},
+  {id:6,color:'#34d399',dirs:['L','R'],cells:[{r:2,c:0},{r:3,c:0},{r:3,c:1},{r:3,c:2},{r:3,c:3},{r:4,c:3},{r:4,c:4},{r:4,c:5},{r:4,c:6}]},
+  {id:7,color:'#f87171',dirs:['R'],cells:[{r:3,c:4},{r:2,c:4},{r:1,c:4},{r:1,c:5},{r:0,c:5},{r:0,c:6},{r:0,c:7}]},
+  {id:8,color:'#e879f9',dirs:['L','U'],cells:[{r:5,c:1},{r:5,c:2},{r:5,c:3},{r:5,c:4},{r:5,c:5},{r:5,c:6},{r:5,c:7},{r:4,c:7},{r:3,c:7}]},
+  {id:9,color:'#2dd4bf',dirs:['U'],cells:[{r:2,c:1},{r:2,c:2},{r:2,c:3},{r:1,c:3},{r:0,c:3},{r:0,c:2},{r:0,c:1},{r:0,c:0}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:6,c:6},{r:6,c:10},{r:5,c:7},{r:7,c:9},{r:2,c:2},{r:7,c:8}],
+  bouncers:[{r:1,c:3},{r:10,c:9},{r:7,c:10},{r:10,c:8}],
+  tunnels:[[{r:11,c:1},{r:3,c:2}],[{r:8,c:2},{r:1,c:7}],[{r:7,c:0},{r:3,c:11}]],
+  navigators:[{r:10,c:10,orient:'D2'}],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['U','U'],cells:[{r:0,c:2},{r:1,c:2},{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:4,c:2},{r:4,c:3},{r:4,c:4},{r:3,c:4}]},
+  {id:1,color:'#60a5fa',dirs:['R','D'],cells:[{r:10,c:11},{r:11,c:11},{r:11,c:10},{r:11,c:9},{r:11,c:8},{r:11,c:7},{r:10,c:7},{r:10,c:6},{r:10,c:5},{r:11,c:5}]},
+  {id:2,color:'#4ade80',dirs:['U','R'],cells:[{r:1,c:10},{r:1,c:9},{r:2,c:9},{r:2,c:8},{r:2,c:7},{r:2,c:6},{r:2,c:5},{r:2,c:4},{r:1,c:4},{r:0,c:4},{r:0,c:5}]},
+  {id:3,color:'#fbbf24',dirs:['R','D'],cells:[{r:1,c:6},{r:0,c:6},{r:0,c:7},{r:0,c:8},{r:0,c:9},{r:0,c:10},{r:0,c:11},{r:1,c:11},{r:2,c:11},{r:2,c:10},{r:3,c:10},{r:4,c:10}]},
+  {id:4,color:'#a78bfa',dirs:['R','D'],cells:[{r:8,c:5},{r:7,c:5},{r:6,c:5},{r:6,c:4},{r:5,c:4},{r:5,c:3},{r:5,c:2},{r:6,c:2}]},
+  {id:5,color:'#fb923c',dirs:['L','U'],cells:[{r:8,c:4},{r:9,c:4},{r:9,c:5},{r:9,c:6},{r:9,c:7},{r:8,c:7},{r:8,c:8},{r:8,c:9},{r:9,c:9},{r:9,c:10},{r:9,c:11},{r:8,c:11}]},
+  {id:6,color:'#34d399',dirs:['U','L'],cells:[{r:5,c:11},{r:5,c:10},{r:5,c:9},{r:4,c:9},{r:3,c:9},{r:3,c:8},{r:3,c:7},{r:3,c:6},{r:3,c:5}]},
+  {id:7,color:'#f87171',dirs:['U'],cells:[{r:9,c:0},{r:10,c:0},{r:10,c:1},{r:10,c:2},{r:11,c:2},{r:11,c:3},{r:11,c:4}]},
+  {id:8,color:'#e879f9',dirs:['L','L'],cells:[{r:7,c:7},{r:6,c:7},{r:6,c:8},{r:5,c:8},{r:4,c:8},{r:4,c:7},{r:4,c:6},{r:5,c:6},{r:5,c:5}]},
+  {id:9,color:'#2dd4bf',dirs:['L','R'],cells:[{r:2,c:0},{r:3,c:0},{r:4,c:0},{r:5,c:0},{r:5,c:1},{r:6,c:1},{r:7,c:1},{r:8,c:1},{r:9,c:1},{r:9,c:2}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:4,c:5},{r:5,c:2},{r:1,c:2},{r:6,c:2},{r:2,c:8},{r:7,c:5}],
+  bouncers:[{r:10,c:7},{r:3,c:3},{r:5,c:8},{r:6,c:6}],
+  tunnels:[[{r:11,c:11},{r:8,c:6}],[{r:4,c:4},{r:8,c:8}],[{r:0,c:9},{r:0,c:10}]],
+  navigators:[{r:6,c:9,orient:'D2'}],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['U','U'],cells:[{r:5,c:1},{r:6,c:1},{r:6,c:0},{r:7,c:0},{r:8,c:0},{r:9,c:0},{r:10,c:0},{r:10,c:1},{r:10,c:2},{r:9,c:2},{r:9,c:3},{r:8,c:3}]},
+  {id:1,color:'#60a5fa',dirs:['D','L'],cells:[{r:2,c:11},{r:2,c:10},{r:3,c:10},{r:3,c:9},{r:3,c:8},{r:3,c:7},{r:2,c:7},{r:2,c:6},{r:1,c:6},{r:1,c:5}]},
+  {id:2,color:'#4ade80',dirs:['D','R'],cells:[{r:7,c:8},{r:6,c:8},{r:6,c:7},{r:5,c:7},{r:4,c:7},{r:4,c:8},{r:4,c:9},{r:5,c:9},{r:5,c:10},{r:5,c:11}]},
+  {id:3,color:'#fbbf24',dirs:['D','R'],cells:[{r:0,c:4},{r:0,c:5},{r:0,c:6},{r:0,c:7},{r:1,c:7},{r:1,c:8},{r:1,c:9},{r:1,c:10},{r:1,c:11}]},
+  {id:4,color:'#a78bfa',dirs:['R','D'],cells:[{r:1,c:4},{r:2,c:4},{r:2,c:5},{r:3,c:5},{r:3,c:6},{r:4,c:6},{r:5,c:6},{r:5,c:5},{r:6,c:5},{r:6,c:4},{r:7,c:4}]},
+  {id:5,color:'#fb923c',dirs:['R','R'],cells:[{r:6,c:11},{r:6,c:10},{r:7,c:10},{r:7,c:9},{r:8,c:9},{r:9,c:9},{r:10,c:9},{r:10,c:10}]},
+  {id:6,color:'#34d399',dirs:['D','D'],cells:[{r:4,c:3},{r:4,c:2},{r:3,c:2},{r:3,c:1},{r:2,c:1},{r:1,c:1},{r:0,c:1},{r:0,c:2},{r:0,c:3},{r:1,c:3},{r:2,c:3}]},
+  {id:7,color:'#f87171',dirs:['U'],cells:[{r:8,c:1},{r:8,c:2},{r:7,c:2},{r:7,c:3},{r:6,c:3},{r:5,c:3},{r:5,c:4}]},
+  {id:8,color:'#e879f9',dirs:['L'],cells:[{r:8,c:5},{r:9,c:5},{r:10,c:5},{r:10,c:6},{r:11,c:6},{r:11,c:7},{r:11,c:8},{r:10,c:8},{r:9,c:8},{r:9,c:7},{r:8,c:7},{r:7,c:7},{r:7,c:6}]},
+  {id:9,color:'#2dd4bf',dirs:['L'],cells:[{r:8,c:4},{r:9,c:4},{r:10,c:4},{r:10,c:3},{r:11,c:3},{r:11,c:2},{r:11,c:1},{r:11,c:0}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:10,c:1},{r:10,c:10},{r:7,c:5},{r:10,c:5},{r:7,c:2},{r:5,c:9}],
+  bouncers:[{r:3,c:6},{r:9,c:10},{r:10,c:6},{r:7,c:6}],
+  tunnels:[[{r:11,c:11},{r:10,c:11}],[{r:10,c:3},{r:5,c:11}],[{r:2,c:1},{r:8,c:8}]],
+  navigators:[{r:9,c:6,orient:'H'}],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['L','L'],cells:[{r:6,c:11},{r:7,c:11},{r:7,c:10},{r:7,c:9},{r:8,c:9},{r:9,c:9},{r:10,c:9},{r:11,c:9},{r:11,c:8}]},
+  {id:1,color:'#60a5fa',dirs:['U','R'],cells:[{r:0,c:0},{r:1,c:0},{r:2,c:0},{r:3,c:0},{r:3,c:1},{r:4,c:1},{r:4,c:2},{r:4,c:3}]},
+  {id:2,color:'#4ade80',dirs:['R','D'],cells:[{r:8,c:4},{r:7,c:4},{r:6,c:4},{r:6,c:3},{r:5,c:3},{r:5,c:2},{r:5,c:1},{r:6,c:1},{r:7,c:1}]},
+  {id:3,color:'#fbbf24',dirs:['L','L'],cells:[{r:9,c:4},{r:10,c:4},{r:11,c:4},{r:11,c:3},{r:11,c:2},{r:10,c:2},{r:9,c:2},{r:9,c:1}]},
+  {id:4,color:'#a78bfa',dirs:['D'],cells:[{r:4,c:7},{r:3,c:7},{r:2,c:7},{r:2,c:6},{r:1,c:6},{r:0,c:6},{r:0,c:5},{r:0,c:4},{r:1,c:4},{r:2,c:4},{r:2,c:3},{r:3,c:3},{r:3,c:2}]},
+  {id:5,color:'#fb923c',dirs:['L','D'],cells:[{r:1,c:5},{r:2,c:5},{r:3,c:5},{r:3,c:4},{r:4,c:4},{r:5,c:4},{r:5,c:5},{r:5,c:6},{r:6,c:6}]},
+  {id:6,color:'#34d399',dirs:['U','U'],cells:[{r:8,c:3},{r:8,c:2},{r:8,c:1},{r:8,c:0},{r:7,c:0},{r:6,c:0},{r:5,c:0},{r:4,c:0}]},
+  {id:7,color:'#f87171',dirs:['R','D'],cells:[{r:1,c:10},{r:1,c:9},{r:1,c:8},{r:2,c:8},{r:3,c:8},{r:3,c:9},{r:3,c:10},{r:3,c:11},{r:4,c:11}]},
+  {id:8,color:'#e879f9',dirs:['R','D'],cells:[{r:6,c:10},{r:5,c:10},{r:4,c:10},{r:4,c:9},{r:4,c:8},{r:5,c:8},{r:6,c:8},{r:6,c:7},{r:7,c:7},{r:8,c:7},{r:8,c:6},{r:8,c:5},{r:9,c:5}]},
+  {id:9,color:'#2dd4bf',dirs:['L','D'],cells:[{r:2,c:10},{r:2,c:11},{r:1,c:11},{r:0,c:11},{r:0,c:10},{r:0,c:9},{r:0,c:8},{r:0,c:7},{r:1,c:7}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:6,c:9},{r:6,c:5},{r:2,c:2},{r:4,c:7},{r:1,c:7},{r:6,c:7}],
+  bouncers:[{r:10,c:9},{r:4,c:9},{r:3,c:7},{r:1,c:2}],
+  tunnels:[[{r:1,c:9},{r:1,c:5}],[{r:4,c:6},{r:0,c:0}],[{r:11,c:7},{r:4,c:11}]],
+  navigators:[{r:4,c:10,orient:'D1'}],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['L','D'],cells:[{r:1,c:0},{r:2,c:0},{r:3,c:0},{r:4,c:0},{r:5,c:0},{r:6,c:0},{r:7,c:0},{r:7,c:1},{r:8,c:1},{r:9,c:1},{r:9,c:0},{r:10,c:0}]},
+  {id:1,color:'#60a5fa',dirs:['D','D'],cells:[{r:1,c:8},{r:0,c:8},{r:0,c:7},{r:0,c:6},{r:0,c:5},{r:0,c:4},{r:1,c:4},{r:1,c:3},{r:2,c:3},{r:3,c:3},{r:3,c:4},{r:4,c:4},{r:5,c:4}]},
+  {id:2,color:'#4ade80',dirs:['L','R'],cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:3,c:2},{r:4,c:2},{r:4,c:3},{r:5,c:3},{r:6,c:3},{r:7,c:3},{r:7,c:4},{r:7,c:5},{r:8,c:5},{r:8,c:6}]},
+  {id:3,color:'#fbbf24',dirs:['D','R'],cells:[{r:5,c:6},{r:5,c:5},{r:4,c:5},{r:3,c:5},{r:2,c:5},{r:2,c:6},{r:2,c:7},{r:2,c:8},{r:2,c:9},{r:2,c:10}]},
+  {id:4,color:'#a78bfa',dirs:['L'],cells:[{r:11,c:6},{r:10,c:6},{r:10,c:7},{r:10,c:8},{r:11,c:8},{r:11,c:9},{r:11,c:10},{r:11,c:11},{r:10,c:11},{r:9,c:11},{r:8,c:11}]},
+  {id:5,color:'#fb923c',dirs:['R','U'],cells:[{r:6,c:11},{r:6,c:10},{r:7,c:10},{r:7,c:9},{r:7,c:8},{r:7,c:7},{r:7,c:6},{r:6,c:6}]},
+  {id:6,color:'#34d399',dirs:['R'],cells:[{r:2,c:11},{r:3,c:11},{r:3,c:10},{r:3,c:9},{r:3,c:8},{r:4,c:8},{r:5,c:8},{r:5,c:9},{r:5,c:10},{r:5,c:11}]},
+  {id:7,color:'#f87171',dirs:['L','L'],cells:[{r:10,c:2},{r:10,c:3},{r:9,c:3},{r:9,c:4},{r:9,c:5},{r:10,c:5},{r:11,c:5},{r:11,c:4}]},
+  {id:8,color:'#e879f9',dirs:['U'],cells:[{r:9,c:6},{r:9,c:7},{r:8,c:7},{r:8,c:8},{r:8,c:9},{r:8,c:10},{r:9,c:10},{r:10,c:10}]},
+  {id:9,color:'#2dd4bf',dirs:['U'],cells:[{r:8,c:3},{r:8,c:2},{r:7,c:2},{r:6,c:2},{r:6,c:1},{r:5,c:1},{r:4,c:1}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:6,c:9},{r:2,c:8},{r:2,c:1},{r:7,c:9},{r:3,c:3},{r:7,c:6}],
+  bouncers:[{r:5,c:7},{r:3,c:9},{r:5,c:3},{r:1,c:10}],
+  tunnels:[[{r:0,c:10},{r:1,c:8}],[{r:3,c:0},{r:2,c:9}],[{r:2,c:0},{r:9,c:9}]],
+  navigators:[{r:8,c:9,orient:'D1'},{r:9,c:7,orient:'D2'}],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['L','U'],cells:[{r:8,c:7},{r:7,c:7},{r:6,c:7},{r:6,c:6},{r:5,c:6},{r:4,c:6},{r:3,c:6}]},
+  {id:1,color:'#60a5fa',dirs:['U','U'],cells:[{r:10,c:5},{r:11,c:5},{r:11,c:6},{r:11,c:7},{r:10,c:7},{r:10,c:8},{r:10,c:9},{r:11,c:9},{r:11,c:10},{r:11,c:11},{r:10,c:11}]},
+  {id:2,color:'#4ade80',dirs:['U','D'],cells:[{r:1,c:4},{r:2,c:4},{r:3,c:4},{r:4,c:4},{r:4,c:5},{r:5,c:5},{r:6,c:5},{r:7,c:5},{r:8,c:5},{r:9,c:5},{r:9,c:4},{r:10,c:4}]},
+  {id:3,color:'#fbbf24',dirs:['L','L'],cells:[{r:8,c:0},{r:7,c:0},{r:7,c:1},{r:7,c:2},{r:6,c:2},{r:6,c:3},{r:6,c:4},{r:7,c:4},{r:8,c:4},{r:8,c:3}]},
+  {id:4,color:'#a78bfa',dirs:['L','U'],cells:[{r:9,c:0},{r:10,c:0},{r:10,c:1},{r:11,c:1},{r:11,c:2},{r:11,c:3},{r:10,c:3},{r:9,c:3},{r:9,c:2},{r:8,c:2}]},
+  {id:5,color:'#fb923c',dirs:['R','L'],cells:[{r:2,c:11},{r:2,c:10},{r:3,c:10},{r:4,c:10},{r:4,c:9},{r:4,c:8},{r:4,c:7},{r:3,c:7},{r:2,c:7},{r:1,c:7},{r:1,c:6},{r:1,c:5}]},
+  {id:6,color:'#34d399',dirs:['L','D'],cells:[{r:1,c:9},{r:0,c:9},{r:0,c:8},{r:0,c:7},{r:0,c:6},{r:0,c:5},{r:0,c:4},{r:0,c:3},{r:1,c:3},{r:2,c:3}]},
+  {id:7,color:'#f87171',dirs:['U','R'],cells:[{r:3,c:2},{r:3,c:1},{r:4,c:1},{r:4,c:0},{r:5,c:0},{r:6,c:0},{r:6,c:1}]},
+  {id:8,color:'#e879f9',dirs:['R','D'],cells:[{r:9,c:10},{r:8,c:10},{r:7,c:10},{r:6,c:10},{r:5,c:10},{r:5,c:9},{r:5,c:8},{r:6,c:8},{r:7,c:8},{r:8,c:8},{r:9,c:8}]},
+  {id:9,color:'#2dd4bf',dirs:['R','D'],cells:[{r:3,c:11},{r:4,c:11},{r:5,c:11},{r:6,c:11},{r:7,c:11},{r:8,c:11},{r:9,c:11}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['L'],cells:[{r:0,c:11},{r:1,c:11},{r:2,c:11},{r:2,c:10},{r:3,c:10},{r:4,c:10},{r:5,c:10},{r:5,c:11}]},
+  {id:1,color:'#60a5fa',dirs:['D','U'],cells:[{r:1,c:3},{r:1,c:2},{r:2,c:2},{r:3,c:2},{r:3,c:1},{r:3,c:0},{r:2,c:0},{r:1,c:0},{r:0,c:0}]},
+  {id:2,color:'#4ade80',dirs:['D','D'],cells:[{r:9,c:2},{r:8,c:2},{r:8,c:1},{r:8,c:0},{r:9,c:0},{r:10,c:0},{r:10,c:1},{r:11,c:1}]},
+  {id:3,color:'#fbbf24',dirs:['R','U'],cells:[{r:10,c:3},{r:9,c:3},{r:8,c:3},{r:8,c:4},{r:7,c:4},{r:6,c:4},{r:5,c:4},{r:5,c:3},{r:4,c:3}]},
+  {id:4,color:'#a78bfa',dirs:['L'],cells:[{r:8,c:11},{r:7,c:11},{r:6,c:11},{r:6,c:10},{r:6,c:9},{r:6,c:8},{r:7,c:8}]},
+  {id:5,color:'#fb923c',dirs:['D','U'],cells:[{r:10,c:6},{r:9,c:6},{r:8,c:6},{r:7,c:6},{r:7,c:7},{r:6,c:7},{r:5,c:7}]},
+  {id:6,color:'#34d399',dirs:['L','L'],cells:[{r:2,c:7},{r:3,c:7},{r:3,c:8},{r:3,c:9},{r:2,c:9},{r:1,c:9},{r:1,c:8},{r:0,c:8},{r:0,c:7},{r:0,c:6}]},
+  {id:7,color:'#f87171',dirs:['D','L'],cells:[{r:8,c:9},{r:8,c:10},{r:9,c:10},{r:10,c:10},{r:10,c:9},{r:10,c:8},{r:10,c:7},{r:11,c:7},{r:11,c:6},{r:11,c:5},{r:11,c:4}]},
+  {id:8,color:'#e879f9',dirs:['L'],cells:[{r:3,c:6},{r:2,c:6},{r:2,c:5},{r:2,c:4},{r:3,c:4},{r:4,c:4},{r:4,c:5},{r:5,c:5},{r:6,c:5},{r:7,c:5},{r:8,c:5},{r:9,c:5}]},
+  {id:9,color:'#2dd4bf',dirs:['D'],cells:[{r:7,c:3},{r:7,c:2},{r:6,c:2},{r:6,c:1},{r:5,c:1},{r:4,c:1},{r:4,c:0}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:2,c:7},{r:1,c:7},{r:7,c:5},{r:7,c:6},{r:7,c:3},{r:8,c:8}],
+  bouncers:[{r:10,c:10},{r:3,c:5},{r:7,c:10},{r:7,c:4}],
+  tunnels:[[{r:5,c:3},{r:0,c:6}],[{r:0,c:3},{r:1,c:6}],[{r:8,c:4},{r:11,c:10}]],
+  navigators:[{r:9,c:4,orient:'D2'},{r:8,c:3,orient:'D1'}],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['R','U'],cells:[{r:3,c:7},{r:3,c:6},{r:2,c:6},{r:2,c:5},{r:1,c:5},{r:1,c:4},{r:1,c:3},{r:1,c:2},{r:2,c:2},{r:2,c:1},{r:2,c:0},{r:1,c:0},{r:0,c:0}]},
+  {id:1,color:'#60a5fa',dirs:['D'],cells:[{r:8,c:1},{r:8,c:2},{r:9,c:2},{r:10,c:2},{r:10,c:3},{r:10,c:4},{r:11,c:4},{r:11,c:5},{r:11,c:6},{r:11,c:7}]},
+  {id:2,color:'#4ade80',dirs:['R','L'],cells:[{r:0,c:10},{r:1,c:10},{r:1,c:11},{r:2,c:11},{r:3,c:11},{r:4,c:11},{r:5,c:11},{r:5,c:10},{r:5,c:9},{r:5,c:8}]},
+  {id:3,color:'#fbbf24',dirs:['D','U'],cells:[{r:9,c:1},{r:9,c:0},{r:8,c:0},{r:7,c:0},{r:7,c:1},{r:6,c:1},{r:6,c:2},{r:5,c:2}]},
+  {id:4,color:'#a78bfa',dirs:['R','R'],cells:[{r:4,c:5},{r:4,c:4},{r:5,c:4},{r:6,c:4},{r:6,c:5},{r:6,c:6},{r:5,c:6},{r:5,c:7},{r:4,c:7},{r:4,c:8}]},
+  {id:5,color:'#fb923c',dirs:['L','U'],cells:[{r:6,c:10},{r:6,c:11},{r:7,c:11},{r:8,c:11},{r:8,c:10},{r:8,c:9},{r:7,c:9},{r:7,c:8},{r:6,c:8}]},
+  {id:6,color:'#34d399',dirs:['D'],cells:[{r:8,c:5},{r:8,c:6},{r:9,c:6},{r:10,c:6},{r:10,c:7},{r:10,c:8},{r:10,c:9}]},
+  {id:7,color:'#f87171',dirs:['U'],cells:[{r:5,c:1},{r:5,c:0},{r:4,c:0},{r:3,c:0},{r:3,c:1},{r:3,c:2},{r:3,c:3},{r:2,c:3},{r:2,c:4}]},
+  {id:8,color:'#e879f9',dirs:['R'],cells:[{r:11,c:11},{r:10,c:11},{r:9,c:11},{r:9,c:10},{r:9,c:9},{r:9,c:8},{r:9,c:7},{r:8,c:7},{r:7,c:7}]},
+  {id:9,color:'#2dd4bf',dirs:['U','L'],cells:[{r:0,c:8},{r:1,c:8},{r:1,c:9},{r:2,c:9},{r:2,c:10},{r:3,c:10},{r:4,c:10},{r:4,c:9}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:9,c:8},{r:10,c:9},{r:5,c:6},{r:4,c:8},{r:10,c:4},{r:5,c:9}],
+  bouncers:[{r:9,c:6},{r:8,c:1},{r:8,c:6},{r:1,c:7}],
+  tunnels:[[{r:3,c:10},{r:6,c:5}],[{r:4,c:2},{r:0,c:0}],[{r:8,c:4},{r:11,c:8}]],
+  navigators:[{r:10,c:8,orient:'H'},{r:10,c:1,orient:'V'}],
+  bunnies:[{r:5,c:0}],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['D','L'],cells:[{r:5,c:11},{r:5,c:10},{r:4,c:10},{r:4,c:9},{r:3,c:9},{r:3,c:8},{r:3,c:7},{r:2,c:7},{r:2,c:6},{r:1,c:6},{r:1,c:5}]},
+  {id:1,color:'#60a5fa',dirs:['R','D'],cells:[{r:6,c:6},{r:7,c:6},{r:7,c:7},{r:7,c:8},{r:7,c:9},{r:6,c:9},{r:6,c:10},{r:6,c:11},{r:7,c:11}]},
+  {id:2,color:'#4ade80',dirs:['U','R'],cells:[{r:0,c:1},{r:0,c:2},{r:0,c:3},{r:0,c:4},{r:0,c:5},{r:0,c:6},{r:0,c:7},{r:0,c:8},{r:0,c:9},{r:1,c:9},{r:1,c:10}]},
+  {id:3,color:'#fbbf24',dirs:['R','R'],cells:[{r:2,c:2},{r:1,c:2},{r:1,c:3},{r:1,c:4},{r:2,c:4},{r:3,c:4},{r:4,c:4},{r:4,c:5}]},
+  {id:4,color:'#a78bfa',dirs:['U','L'],cells:[{r:9,c:10},{r:9,c:9},{r:8,c:9},{r:8,c:8},{r:8,c:7},{r:9,c:7},{r:10,c:7},{r:10,c:6},{r:11,c:6},{r:11,c:5},{r:11,c:4}]},
+  {id:5,color:'#fb923c',dirs:['R','U'],cells:[{r:6,c:7},{r:5,c:7},{r:4,c:7},{r:4,c:6},{r:3,c:6},{r:3,c:5},{r:2,c:5}]},
+  {id:6,color:'#34d399',dirs:['L'],cells:[{r:7,c:5},{r:8,c:5},{r:9,c:5},{r:9,c:4},{r:9,c:3},{r:10,c:3},{r:11,c:3},{r:11,c:2},{r:11,c:1},{r:11,c:0},{r:10,c:0},{r:9,c:0},{r:9,c:1}]},
+  {id:7,color:'#f87171',dirs:['L','L'],cells:[{r:1,c:0},{r:2,c:0},{r:3,c:0},{r:4,c:0},{r:4,c:1},{r:5,c:1},{r:6,c:1},{r:6,c:0}]},
+  {id:8,color:'#e879f9',dirs:['D','L'],cells:[{r:3,c:2},{r:3,c:3},{r:4,c:3},{r:5,c:3},{r:5,c:4},{r:6,c:4},{r:7,c:4},{r:7,c:3},{r:7,c:2},{r:7,c:1},{r:7,c:0}]},
+  {id:9,color:'#2dd4bf',dirs:['L','L'],cells:[{r:7,c:10},{r:8,c:10},{r:8,c:11},{r:9,c:11},{r:10,c:11},{r:10,c:10},{r:11,c:10},{r:11,c:9}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['D','D'],cells:[{r:1,c:5},{r:1,c:4},{r:2,c:4},{r:3,c:4},{r:3,c:3},{r:3,c:2},{r:2,c:2},{r:2,c:1},{r:2,c:0},{r:3,c:0},{r:4,c:0},{r:4,c:1},{r:5,c:1}]},
+  {id:1,color:'#60a5fa',dirs:['L'],cells:[{r:8,c:2},{r:7,c:2},{r:6,c:2},{r:6,c:3},{r:5,c:3},{r:4,c:3},{r:4,c:4},{r:4,c:5},{r:3,c:5}]},
+  {id:2,color:'#4ade80',dirs:['D','L'],cells:[{r:6,c:8},{r:6,c:9},{r:7,c:9},{r:8,c:9},{r:8,c:10},{r:9,c:10},{r:9,c:11},{r:10,c:11},{r:11,c:11},{r:11,c:10},{r:11,c:9},{r:10,c:9},{r:10,c:8}]},
+  {id:3,color:'#fbbf24',dirs:['D','U'],cells:[{r:11,c:4},{r:11,c:3},{r:10,c:3},{r:10,c:2},{r:9,c:2},{r:9,c:1},{r:8,c:1},{r:7,c:1},{r:6,c:1},{r:6,c:0},{r:5,c:0}]},
+  {id:4,color:'#a78bfa',dirs:['D','R'],cells:[{r:0,c:7},{r:0,c:8},{r:1,c:8},{r:1,c:9},{r:1,c:10},{r:2,c:10},{r:3,c:10},{r:3,c:9},{r:3,c:8},{r:4,c:8},{r:5,c:8},{r:5,c:9}]},
+  {id:5,color:'#fb923c',dirs:['D'],cells:[{r:9,c:7},{r:9,c:8},{r:8,c:8},{r:7,c:8},{r:7,c:7},{r:6,c:7},{r:6,c:6},{r:6,c:5},{r:6,c:4}]},
+  {id:6,color:'#34d399',dirs:['D','D'],cells:[{r:8,c:7},{r:8,c:6},{r:7,c:6},{r:7,c:5},{r:7,c:4},{r:7,c:3},{r:8,c:3},{r:9,c:3},{r:9,c:4},{r:10,c:4}]},
+  {id:7,color:'#f87171',dirs:['U','L'],cells:[{r:2,c:8},{r:2,c:7},{r:3,c:7},{r:4,c:7},{r:5,c:7},{r:5,c:6},{r:5,c:5}]},
+  {id:8,color:'#e879f9',dirs:['L','D'],cells:[{r:0,c:1},{r:1,c:1},{r:1,c:2},{r:1,c:3},{r:0,c:3},{r:0,c:4},{r:0,c:5},{r:0,c:6},{r:1,c:6},{r:2,c:6},{r:3,c:6},{r:4,c:6}]},
+  {id:9,color:'#2dd4bf',dirs:['D','U'],cells:[{r:8,c:11},{r:7,c:11},{r:6,c:11},{r:5,c:11},{r:4,c:11},{r:3,c:11},{r:2,c:11},{r:1,c:11},{r:0,c:11}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:2,c:1},{r:5,c:9},{r:3,c:2},{r:4,c:2},{r:4,c:5},{r:5,c:3}],
+  bouncers:[{r:9,c:7},{r:3,c:1},{r:9,c:5},{r:4,c:9}],
+  tunnels:[[{r:1,c:2},{r:7,c:1}],[{r:2,c:11},{r:9,c:0}],[{r:0,c:11},{r:11,c:6}]],
+  navigators:[{r:2,c:7,orient:'D1'},{r:4,c:1,orient:'D1'},{r:2,c:2,orient:'V'}],
+  bunnies:[{r:2,c:4}],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['L','R'],cells:[{r:7,c:9},{r:7,c:10},{r:7,c:11},{r:6,c:11},{r:5,c:11},{r:4,c:11},{r:3,c:11},{r:3,c:10},{r:3,c:9},{r:2,c:9},{r:1,c:9},{r:0,c:9},{r:0,c:10}]},
+  {id:1,color:'#60a5fa',dirs:['L','U'],cells:[{r:11,c:0},{r:10,c:0},{r:10,c:1},{r:9,c:1},{r:9,c:2},{r:8,c:2},{r:7,c:2}]},
+  {id:2,color:'#4ade80',dirs:['R','L'],cells:[{r:10,c:11},{r:9,c:11},{r:8,c:11},{r:8,c:10},{r:8,c:9},{r:9,c:9},{r:10,c:9},{r:10,c:8}]},
+  {id:3,color:'#fbbf24',dirs:['R','D'],cells:[{r:11,c:5},{r:10,c:5},{r:10,c:4},{r:9,c:4},{r:8,c:4},{r:7,c:4},{r:7,c:5},{r:6,c:5},{r:6,c:6},{r:6,c:7},{r:7,c:7},{r:7,c:8},{r:8,c:8}]},
+  {id:4,color:'#a78bfa',dirs:['R','L'],cells:[{r:11,c:4},{r:11,c:3},{r:10,c:3},{r:9,c:3},{r:8,c:3},{r:7,c:3},{r:6,c:3},{r:6,c:2},{r:5,c:2},{r:5,c:1},{r:5,c:0}]},
+  {id:5,color:'#fb923c',dirs:['R','L'],cells:[{r:1,c:0},{r:0,c:0},{r:0,c:1},{r:0,c:2},{r:0,c:3},{r:1,c:3},{r:1,c:4},{r:1,c:5},{r:2,c:5},{r:3,c:5},{r:3,c:4}]},
+  {id:6,color:'#34d399',dirs:['U','U'],cells:[{r:3,c:3},{r:4,c:3},{r:4,c:4},{r:5,c:4},{r:5,c:5},{r:5,c:6},{r:4,c:6},{r:3,c:6},{r:2,c:6},{r:1,c:6}]},
+  {id:7,color:'#f87171',dirs:['R','R'],cells:[{r:6,c:10},{r:6,c:9},{r:6,c:8},{r:5,c:8},{r:5,c:7},{r:4,c:7},{r:3,c:7},{r:3,c:8}]},
+  {id:8,color:'#e879f9',dirs:['R','U'],cells:[{r:8,c:6},{r:9,c:6},{r:10,c:6},{r:10,c:7},{r:11,c:7},{r:11,c:8},{r:11,c:9},{r:11,c:10},{r:10,c:10},{r:9,c:10}]},
+  {id:9,color:'#2dd4bf',dirs:['D'],cells:[{r:0,c:4},{r:0,c:5},{r:0,c:6},{r:0,c:7},{r:0,c:8},{r:1,c:8},{r:2,c:8}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:3,c:6},{r:7,c:7},{r:9,c:6},{r:3,c:5},{r:8,c:3},{r:8,c:2}],
+  bouncers:[{r:6,c:5},{r:10,c:6},{r:1,c:10},{r:3,c:1}],
+  tunnels:[[{r:0,c:0},{r:0,c:1}],[{r:0,c:11},{r:8,c:4}],[{r:2,c:2},{r:1,c:11}]],
+  navigators:[{r:1,c:5,orient:'V'},{r:3,c:10,orient:'V'},{r:9,c:3,orient:'D1'}],
+  bunnies:[{r:0,c:8},{r:9,c:7}],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['D','L'],cells:[{r:8,c:7},{r:8,c:6},{r:7,c:6},{r:6,c:6},{r:5,c:6},{r:5,c:5},{r:5,c:4},{r:6,c:4},{r:6,c:3}]},
+  {id:1,color:'#60a5fa',dirs:['U','L'],cells:[{r:0,c:10},{r:0,c:9},{r:1,c:9},{r:1,c:8},{r:1,c:7},{r:1,c:6},{r:0,c:6},{r:0,c:5},{r:0,c:4},{r:0,c:3}]},
+  {id:2,color:'#4ade80',dirs:['R'],cells:[{r:2,c:1},{r:1,c:1},{r:1,c:2},{r:1,c:3},{r:2,c:3},{r:3,c:3},{r:3,c:2},{r:4,c:2},{r:4,c:1},{r:4,c:0},{r:5,c:0}]},
+  {id:3,color:'#fbbf24',dirs:['L'],cells:[{r:5,c:9},{r:4,c:9},{r:4,c:8},{r:3,c:8},{r:2,c:8},{r:2,c:7},{r:2,c:6},{r:2,c:5},{r:2,c:4},{r:1,c:4}]},
+  {id:4,color:'#a78bfa',dirs:['L','D'],cells:[{r:5,c:11},{r:6,c:11},{r:7,c:11},{r:7,c:10},{r:8,c:10},{r:9,c:10},{r:9,c:11},{r:10,c:11},{r:11,c:11}]},
+  {id:5,color:'#fb923c',dirs:['U','D'],cells:[{r:7,c:8},{r:8,c:8},{r:9,c:8},{r:10,c:8},{r:10,c:9},{r:10,c:10},{r:11,c:10}]},
+  {id:6,color:'#34d399',dirs:['L','R'],cells:[{r:5,c:1},{r:5,c:2},{r:5,c:3},{r:4,c:3},{r:4,c:4},{r:4,c:5},{r:4,c:6},{r:4,c:7}]},
+  {id:7,color:'#f87171',dirs:['U','R'],cells:[{r:6,c:0},{r:7,c:0},{r:8,c:0},{r:8,c:1},{r:9,c:1},{r:9,c:2},{r:10,c:2},{r:10,c:3},{r:11,c:3},{r:11,c:4}]},
+  {id:8,color:'#e879f9',dirs:['U','L'],cells:[{r:10,c:4},{r:10,c:5},{r:9,c:5},{r:8,c:5},{r:7,c:5},{r:7,c:4},{r:7,c:3},{r:7,c:2},{r:6,c:2},{r:6,c:1}]},
+  {id:9,color:'#2dd4bf',dirs:['U','D'],cells:[{r:6,c:7},{r:6,c:8},{r:6,c:9},{r:6,c:10},{r:5,c:10},{r:4,c:10},{r:4,c:11},{r:3,c:11},{r:2,c:11},{r:2,c:10},{r:2,c:9},{r:3,c:9}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:4,c:5},{r:4,c:1},{r:5,c:5},{r:1,c:2},{r:5,c:7},{r:10,c:1}],
+  bouncers:[{r:4,c:7},{r:4,c:10},{r:3,c:1}],
+  tunnels:[[{r:9,c:1},{r:11,c:11}],[{r:3,c:0},{r:10,c:10}],[{r:9,c:2},{r:10,c:9}]],
+  navigators:[],
+  bunnies:[{r:6,c:10},{r:7,c:0}],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['R','R'],cells:[{r:9,c:0},{r:8,c:0},{r:8,c:1},{r:8,c:2},{r:7,c:2},{r:6,c:2},{r:6,c:3},{r:5,c:3},{r:5,c:4},{r:4,c:4},{r:3,c:4},{r:3,c:5}]},
+  {id:1,color:'#60a5fa',dirs:['U','U'],cells:[{r:10,c:0},{r:11,c:0},{r:11,c:1},{r:11,c:2},{r:10,c:2},{r:10,c:3},{r:9,c:3},{r:8,c:3},{r:8,c:4},{r:7,c:4},{r:6,c:4}]},
+  {id:2,color:'#4ade80',dirs:['L','U'],cells:[{r:8,c:11},{r:9,c:11},{r:9,c:10},{r:9,c:9},{r:8,c:9},{r:7,c:9},{r:6,c:9}]},
+  {id:3,color:'#fbbf24',dirs:['R','D'],cells:[{r:1,c:6},{r:2,c:6},{r:2,c:5},{r:2,c:4},{r:1,c:4},{r:0,c:4},{r:0,c:3},{r:0,c:2},{r:0,c:1},{r:1,c:1},{r:2,c:1},{r:2,c:2},{r:3,c:2}]},
+  {id:4,color:'#a78bfa',dirs:['R','D'],cells:[{r:4,c:11},{r:3,c:11},{r:3,c:10},{r:2,c:10},{r:2,c:9},{r:1,c:9},{r:1,c:8},{r:1,c:7},{r:2,c:7},{r:3,c:7},{r:3,c:6},{r:4,c:6},{r:5,c:6}]},
+  {id:5,color:'#fb923c',dirs:['L'],cells:[{r:5,c:0},{r:5,c:1},{r:5,c:2},{r:4,c:2},{r:4,c:3},{r:3,c:3},{r:2,c:3},{r:1,c:3}]},
+  {id:6,color:'#34d399',dirs:['L','U'],cells:[{r:6,c:7},{r:6,c:8},{r:7,c:8},{r:8,c:8},{r:9,c:8},{r:10,c:8},{r:11,c:8},{r:11,c:7},{r:11,c:6},{r:11,c:5},{r:10,c:5}]},
+  {id:7,color:'#f87171',dirs:['L'],cells:[{r:6,c:5},{r:7,c:5},{r:7,c:6},{r:7,c:7},{r:8,c:7},{r:9,c:7},{r:9,c:6},{r:9,c:5},{r:9,c:4},{r:10,c:4},{r:11,c:4}]},
+  {id:8,color:'#e879f9',dirs:['U','D'],cells:[{r:0,c:5},{r:0,c:6},{r:0,c:7},{r:0,c:8},{r:0,c:9},{r:0,c:10},{r:1,c:10},{r:1,c:11},{r:2,c:11}]},
+  {id:9,color:'#2dd4bf',dirs:['D','L'],cells:[{r:3,c:8},{r:3,c:9},{r:4,c:9},{r:5,c:9},{r:5,c:10},{r:5,c:11},{r:6,c:11},{r:7,c:11},{r:7,c:10}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:8,c:10},{r:1,c:7},{r:2,c:4},{r:6,c:5},{r:2,c:2},{r:9,c:8},{r:6,c:2,patrol:[{r:6,c:2},{r:6,c:11}],speed:'medium'}],
+  bouncers:[{r:1,c:6},{r:6,c:8},{r:4,c:9},{r:4,c:10}],
+  tunnels:[[{r:9,c:4},{r:8,c:8}],[{r:0,c:4},{r:9,c:7}],[{r:0,c:3},{r:7,c:0}]],
+  navigators:[{r:10,c:10,orient:'D2'},{r:1,c:1,orient:'D2'},{r:2,c:3,orient:'D1'}],
+  bunnies:[{r:11,c:11},{r:10,c:11}],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['L','R'],cells:[{r:9,c:1},{r:8,c:1},{r:7,c:1},{r:6,c:1},{r:6,c:0},{r:5,c:0},{r:4,c:0},{r:4,c:1},{r:3,c:1},{r:3,c:2}]},
+  {id:1,color:'#60a5fa',dirs:['L','D'],cells:[{r:10,c:6},{r:9,c:6},{r:8,c:6},{r:8,c:7},{r:7,c:7},{r:7,c:8},{r:7,c:9},{r:7,c:10},{r:7,c:11},{r:8,c:11},{r:9,c:11}]},
+  {id:2,color:'#4ade80',dirs:['D','L'],cells:[{r:11,c:10},{r:11,c:9},{r:10,c:9},{r:10,c:8},{r:10,c:7},{r:11,c:7},{r:11,c:6}]},
+  {id:3,color:'#fbbf24',dirs:['D','D'],cells:[{r:10,c:1},{r:10,c:2},{r:9,c:2},{r:8,c:2},{r:8,c:3},{r:7,c:3},{r:6,c:3},{r:5,c:3},{r:4,c:3},{r:4,c:4},{r:4,c:5},{r:5,c:5}]},
+  {id:4,color:'#a78bfa',dirs:['D','U'],cells:[{r:11,c:4},{r:11,c:3},{r:11,c:2},{r:11,c:1},{r:11,c:0},{r:10,c:0},{r:9,c:0},{r:8,c:0}]},
+  {id:5,color:'#fb923c',dirs:['U','L'],cells:[{r:3,c:9},{r:3,c:8},{r:4,c:8},{r:4,c:7},{r:5,c:7},{r:6,c:7},{r:6,c:6},{r:7,c:6},{r:7,c:5}]},
+  {id:6,color:'#34d399',dirs:['R'],cells:[{r:5,c:4},{r:6,c:4},{r:7,c:4},{r:8,c:4},{r:8,c:5},{r:9,c:5},{r:10,c:5},{r:10,c:4},{r:10,c:3},{r:9,c:3}]},
+  {id:7,color:'#f87171',dirs:['D','L'],cells:[{r:5,c:9},{r:5,c:10},{r:5,c:11},{r:4,c:11},{r:3,c:11},{r:3,c:10},{r:2,c:10},{r:2,c:9},{r:2,c:8},{r:2,c:7}]},
+  {id:8,color:'#e879f9',dirs:['L','U'],cells:[{r:5,c:6},{r:4,c:6},{r:3,c:6},{r:2,c:6},{r:2,c:5},{r:1,c:5},{r:1,c:4},{r:1,c:3},{r:1,c:2},{r:0,c:2}]},
+  {id:9,color:'#2dd4bf',dirs:['U','L'],cells:[{r:0,c:11},{r:1,c:11},{r:1,c:10},{r:1,c:9},{r:1,c:8},{r:0,c:8},{r:0,c:7},{r:0,c:6},{r:0,c:5}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:9,c:10},{r:8,c:7},{r:7,c:10},{r:10,c:10},{r:2,c:10},{r:1,c:4}],
+  bouncers:[{r:6,c:10},{r:6,c:7},{r:8,c:2},{r:7,c:7}],
+  tunnels:[[{r:1,c:1},{r:5,c:11}],[{r:6,c:11},{r:4,c:4}],[{r:8,c:8},{r:8,c:1}]],
+  navigators:[{r:2,c:4,orient:'D2'},{r:1,c:10,orient:'D2'},{r:5,c:2,orient:'V'}],
+  bunnies:[{r:8,c:3},{r:0,c:5},{r:1,c:7}],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['D','U'],cells:[{r:5,c:8},{r:5,c:7},{r:5,c:6},{r:6,c:6},{r:7,c:6},{r:8,c:6},{r:9,c:6},{r:9,c:7},{r:10,c:7},{r:10,c:8},{r:10,c:9},{r:9,c:9}]},
+  {id:1,color:'#60a5fa',dirs:['U','U'],cells:[{r:0,c:9},{r:0,c:10},{r:0,c:11},{r:1,c:11},{r:2,c:11},{r:3,c:11},{r:3,c:10},{r:4,c:10},{r:4,c:9},{r:4,c:8},{r:3,c:8}]},
+  {id:2,color:'#4ade80',dirs:['U','L'],cells:[{r:5,c:9},{r:6,c:9},{r:7,c:9},{r:8,c:9},{r:8,c:10},{r:8,c:11},{r:9,c:11},{r:10,c:11},{r:11,c:11},{r:11,c:10},{r:11,c:9}]},
+  {id:3,color:'#fbbf24',dirs:['D','L'],cells:[{r:11,c:5},{r:11,c:4},{r:11,c:3},{r:11,c:2},{r:10,c:2},{r:9,c:2},{r:9,c:3},{r:9,c:4},{r:9,c:5},{r:8,c:5},{r:7,c:5},{r:7,c:4},{r:7,c:3}]},
+  {id:4,color:'#a78bfa',dirs:['D'],cells:[{r:7,c:1},{r:7,c:2},{r:6,c:2},{r:6,c:3},{r:6,c:4},{r:6,c:5},{r:5,c:5},{r:4,c:5},{r:4,c:6},{r:4,c:7},{r:3,c:7}]},
+  {id:5,color:'#fb923c',dirs:['R','L'],cells:[{r:3,c:1},{r:3,c:0},{r:4,c:0},{r:5,c:0},{r:6,c:0},{r:7,c:0},{r:8,c:0},{r:9,c:0},{r:9,c:1},{r:10,c:1},{r:11,c:1},{r:11,c:0}]},
+  {id:6,color:'#34d399',dirs:['U','D'],cells:[{r:1,c:5},{r:1,c:6},{r:0,c:6},{r:0,c:7},{r:0,c:8},{r:1,c:8},{r:2,c:8}]},
+  {id:7,color:'#f87171',dirs:['U','R'],cells:[{r:2,c:7},{r:2,c:6},{r:2,c:5},{r:3,c:5},{r:3,c:4},{r:3,c:3},{r:2,c:3},{r:2,c:2},{r:2,c:1},{r:2,c:0},{r:1,c:0},{r:0,c:0},{r:0,c:1}]},
+  {id:8,color:'#e879f9',dirs:['U','R'],cells:[{r:10,c:3},{r:10,c:4},{r:10,c:5},{r:10,c:6},{r:11,c:6},{r:11,c:7},{r:11,c:8}]},
+  {id:9,color:'#2dd4bf',dirs:['D','D'],cells:[{r:5,c:4},{r:5,c:3},{r:4,c:3},{r:4,c:2},{r:4,c:1},{r:5,c:1},{r:6,c:1}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[{r:5,c:1},{r:1,c:7},{r:3,c:9},{r:1,c:4},{r:5,c:4},{r:6,c:4}],
+  bouncers:[{r:5,c:5},{r:4,c:9},{r:1,c:8}],
+  tunnels:[[{r:0,c:0},{r:2,c:1}],[{r:5,c:7},{r:11,c:5}],[{r:1,c:5},{r:7,c:0}]],
+  navigators:[],
+  bunnies:[{r:10,c:5},{r:4,c:2},{r:10,c:7}],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['U','D'],cells:[{r:5,c:6},{r:6,c:6},{r:6,c:5},{r:7,c:5},{r:8,c:5},{r:8,c:6},{r:9,c:6},{r:9,c:7},{r:9,c:8},{r:10,c:8},{r:11,c:8}]},
+  {id:1,color:'#60a5fa',dirs:['R'],cells:[{r:10,c:0},{r:11,c:0},{r:11,c:1},{r:11,c:2},{r:10,c:2},{r:10,c:3},{r:10,c:4},{r:9,c:4},{r:8,c:4},{r:8,c:3},{r:8,c:2}]},
+  {id:2,color:'#4ade80',dirs:['R','L'],cells:[{r:9,c:9},{r:10,c:9},{r:10,c:10},{r:10,c:11},{r:9,c:11},{r:8,c:11},{r:7,c:11},{r:7,c:10}]},
+  {id:3,color:'#fbbf24',dirs:['U','R'],cells:[{r:5,c:2},{r:6,c:2},{r:6,c:1},{r:6,c:0},{r:5,c:0},{r:4,c:0},{r:4,c:1}]},
+  {id:4,color:'#a78bfa',dirs:['D','U'],cells:[{r:8,c:1},{r:7,c:1},{r:7,c:2},{r:7,c:3},{r:6,c:3},{r:5,c:3},{r:4,c:3},{r:4,c:4},{r:3,c:4},{r:3,c:5},{r:2,c:5}]},
+  {id:5,color:'#fb923c',dirs:['L','R'],cells:[{r:0,c:2},{r:1,c:2},{r:1,c:1},{r:1,c:0},{r:2,c:0},{r:3,c:0},{r:3,c:1},{r:3,c:2},{r:3,c:3}]},
+  {id:6,color:'#34d399',dirs:['R','L'],cells:[{r:0,c:10},{r:1,c:10},{r:1,c:9},{r:2,c:9},{r:2,c:8},{r:3,c:8},{r:4,c:8},{r:4,c:7},{r:4,c:6},{r:4,c:5}]},
+  {id:7,color:'#f87171',dirs:['L','U'],cells:[{r:7,c:8},{r:7,c:9},{r:6,c:9},{r:5,c:9},{r:5,c:10},{r:4,c:10},{r:3,c:10},{r:2,c:10}]},
+  {id:8,color:'#e879f9',dirs:['D','D'],cells:[{r:2,c:7},{r:2,c:6},{r:1,c:6},{r:0,c:6},{r:0,c:5},{r:0,c:4},{r:0,c:3},{r:1,c:3},{r:2,c:3}]},
+  {id:9,color:'#2dd4bf',dirs:['R','D'],cells:[{r:5,c:8},{r:6,c:8},{r:6,c:7},{r:7,c:7},{r:8,c:7},{r:8,c:8},{r:8,c:9},{r:8,c:10},{r:9,c:10}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['R','D'],cells:[{r:0,c:2},{r:1,c:2},{r:2,c:2},{r:2,c:1},{r:2,c:0},{r:3,c:0},{r:4,c:0},{r:5,c:0}]},
+  {id:1,color:'#60a5fa',dirs:['U','U'],cells:[{r:5,c:2},{r:5,c:3},{r:4,c:3},{r:4,c:4},{r:4,c:5},{r:4,c:6},{r:3,c:6},{r:2,c:6},{r:2,c:5},{r:1,c:5},{r:0,c:5}]},
+  {id:2,color:'#4ade80',dirs:['R'],cells:[{r:9,c:4},{r:9,c:3},{r:9,c:2},{r:10,c:2},{r:10,c:1},{r:10,c:0},{r:9,c:0},{r:8,c:0},{r:7,c:0},{r:6,c:0},{r:6,c:1},{r:6,c:2},{r:6,c:3}]},
+  {id:3,color:'#fbbf24',dirs:['U','D'],cells:[{r:2,c:11},{r:3,c:11},{r:4,c:11},{r:4,c:10},{r:5,c:10},{r:6,c:10},{r:7,c:10},{r:7,c:9},{r:8,c:9}]},
+  {id:4,color:'#a78bfa',dirs:['D','D'],cells:[{r:8,c:8},{r:7,c:8},{r:7,c:7},{r:7,c:6},{r:6,c:6},{r:6,c:5},{r:6,c:4},{r:7,c:4}]},
+  {id:5,color:'#fb923c',dirs:['D','L'],cells:[{r:8,c:7},{r:8,c:6},{r:9,c:6},{r:10,c:6},{r:10,c:5},{r:10,c:4},{r:11,c:4},{r:11,c:3}]},
+  {id:6,color:'#34d399',dirs:['U','L'],cells:[{r:1,c:6},{r:1,c:7},{r:0,c:7},{r:0,c:8},{r:0,c:9},{r:1,c:9},{r:2,c:9},{r:3,c:9},{r:3,c:8},{r:4,c:8},{r:4,c:7}]},
+  {id:7,color:'#f87171',dirs:['D'],cells:[{r:8,c:5},{r:8,c:4},{r:8,c:3},{r:7,c:3},{r:7,c:2},{r:7,c:1},{r:8,c:1}]},
+  {id:8,color:'#e879f9',dirs:['U','R'],cells:[{r:10,c:11},{r:10,c:10},{r:10,c:9},{r:9,c:9},{r:9,c:8},{r:9,c:7},{r:10,c:7},{r:11,c:7},{r:11,c:8}]},
+  {id:9,color:'#2dd4bf',dirs:['L','L'],cells:[{r:4,c:1},{r:4,c:2},{r:3,c:2},{r:3,c:3},{r:2,c:3},{r:2,c:4},{r:1,c:4},{r:0,c:4},{r:0,c:3}]}
+  ]
+},
+
+{
+  rows:12,cols:12,
+  stones:[],
+  bouncers:[],
+  tunnels:[],
+  navigators:[],
+  bunnies:[],
+  snakes:[
+  {id:0,color:'#f472b6',dirs:['D','L'],cells:[{r:6,c:9},{r:6,c:8},{r:7,c:8},{r:8,c:8},{r:8,c:7},{r:9,c:7},{r:9,c:6},{r:10,c:6},{r:10,c:5},{r:10,c:4},{r:10,c:3}]},
+  {id:1,color:'#60a5fa',dirs:['R','D'],cells:[{r:3,c:3},{r:3,c:2},{r:2,c:2},{r:1,c:2},{r:0,c:2},{r:0,c:1},{r:0,c:0},{r:1,c:0},{r:2,c:0}]},
+  {id:2,color:'#4ade80',dirs:['R','R'],cells:[{r:11,c:3},{r:11,c:2},{r:11,c:1},{r:11,c:0},{r:10,c:0},{r:9,c:0},{r:9,c:1},{r:9,c:2},{r:9,c:3},{r:9,c:4}]},
+  {id:3,color:'#fbbf24',dirs:['R','U'],cells:[{r:0,c:10},{r:1,c:10},{r:1,c:11},{r:2,c:11},{r:3,c:11},{r:3,c:10},{r:3,c:9},{r:2,c:9},{r:2,c:8},{r:1,c:8}]},
+  {id:4,color:'#a78bfa',dirs:['R'],cells:[{r:7,c:0},{r:8,c:0},{r:8,c:1},{r:8,c:2},{r:8,c:3},{r:8,c:4},{r:7,c:4},{r:7,c:5},{r:7,c:6},{r:7,c:7}]},
+  {id:5,color:'#fb923c',dirs:['D','L'],cells:[{r:9,c:9},{r:9,c:10},{r:8,c:10},{r:7,c:10},{r:7,c:11},{r:6,c:11},{r:5,c:11},{r:5,c:10},{r:4,c:10},{r:4,c:9},{r:4,c:8},{r:4,c:7}]},
+  {id:6,color:'#34d399',dirs:['U','L'],cells:[{r:3,c:5},{r:3,c:6},{r:2,c:6},{r:2,c:7},{r:1,c:7},{r:0,c:7},{r:0,c:6},{r:0,c:5},{r:1,c:5},{r:1,c:4},{r:2,c:4},{r:2,c:3}]},
+  {id:7,color:'#f87171',dirs:['R'],cells:[{r:5,c:1},{r:6,c:1},{r:6,c:2},{r:6,c:3},{r:5,c:3},{r:5,c:4},{r:4,c:4},{r:4,c:5}]},
+  {id:8,color:'#e879f9',dirs:['R','L'],cells:[{r:8,c:11},{r:9,c:11},{r:10,c:11},{r:10,c:10},{r:10,c:9},{r:11,c:9},{r:11,c:8},{r:11,c:7}]},
+  {id:9,color:'#2dd4bf',dirs:['R','D'],cells:[{r:1,c:1},{r:2,c:1},{r:3,c:1},{r:4,c:1},{r:4,c:0},{r:5,c:0},{r:6,c:0}]}
+  ]
+}
+
 ];
+
+
+
+
+
+
+
+
+
 
 const CELL = 48, PAD = 16;
 const canvas = document.getElementById('maze');
@@ -561,28 +1393,77 @@ const Music = (() => {
   let playing = false;
   let pendingLevel = null;
 
-  // ── The melody: 16 eighth-note steps, semitones above root ──
-  // A gentle, memorable tune in pentatonic — two 8-note phrases
-  // Phrase A: rises and falls softly
-  // Phrase B: answers with a little skip and resolution
+  // ── The melody: 64 eighth-note steps, semitones above root ──
+  // Four 16-note phrases: A, B, C (bridge/minor feel), D (climax + return)
   const MELODY = [
-  //  step:  0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15
+    // ── Phrase A — gentle rise and curl ──
     { s:  0, d: 0.7 },  // root
-    { s:  4, d: 0.5 },  // major third
+    { s:  4, d: 0.5 },  // third
     { s:  7, d: 0.7 },  // fifth
     { s:  9, d: 1.0 },  // sixth (hold)
-    { s:  7, d: 0.5 },  // fifth (echo)
+    { s:  7, d: 0.5 },  // fifth
     { s:  4, d: 0.5 },  // third
     { s:  2, d: 0.7 },  // second
-    { s:  0, d: 1.0 },  // root (hold — end phrase A)
+    { s:  0, d: 1.0 },  // root (hold)
     { s:  5, d: 0.5 },  // fourth
     { s:  7, d: 0.5 },  // fifth
     { s:  9, d: 0.7 },  // sixth
-    { s: 12, d: 1.0 },  // octave (sparkle — hold)
+    { s: 12, d: 1.0 },  // octave (sparkle)
     { s:  9, d: 0.5 },  // sixth
     { s:  7, d: 0.5 },  // fifth
     { s:  4, d: 0.7 },  // third
-    { s:  0, d: 1.5 },  // root (long hold — end phrase B)
+    { s:  0, d: 1.5 },  // root (long hold — end A)
+    // ── Phrase B — steps up, dances at the top ──
+    { s:  4, d: 0.5 },  // third
+    { s:  7, d: 0.5 },  // fifth
+    { s:  9, d: 0.7 },  // sixth
+    { s: 12, d: 1.0 },  // octave
+    { s: 14, d: 0.5 },  // ninth
+    { s: 12, d: 0.5 },  // octave
+    { s:  9, d: 0.7 },  // sixth
+    { s: 12, d: 0.5 },  // octave (bounce)
+    { s:  9, d: 0.5 },  // sixth
+    { s:  7, d: 0.7 },  // fifth
+    { s:  5, d: 0.5 },  // fourth
+    { s:  4, d: 1.0 },  // third (hold)
+    { s:  2, d: 0.5 },  // second
+    { s:  4, d: 0.5 },  // third
+    { s:  0, d: 0.7 },  // root
+    { s:  0, d: 1.5 },  // root (long hold — end B)
+    // ── Phrase C — bridge: lower register, wistful ──
+    { s: -3, d: 0.7 },  // below root (minor third)
+    { s:  0, d: 0.5 },  // root
+    { s:  2, d: 0.5 },  // second
+    { s:  4, d: 1.0 },  // third
+    { s:  2, d: 0.5 },  // second
+    { s:  0, d: 0.5 },  // root
+    { s: -3, d: 0.7 },  // below root
+    { s: -5, d: 1.0 },  // fifth below (hold)
+    { s:  0, d: 0.5 },  // root
+    { s:  4, d: 0.5 },  // third
+    { s:  7, d: 0.7 },  // fifth
+    { s:  9, d: 1.0 },  // sixth
+    { s:  7, d: 0.5 },  // fifth
+    { s:  5, d: 0.5 },  // fourth
+    { s:  4, d: 0.7 },  // third
+    { s:  2, d: 1.5 },  // second (long hold — end C)
+    // ── Phrase D — climax: soars to high, tumbles back to root ──
+    { s:  7, d: 0.5 },  // fifth
+    { s:  9, d: 0.5 },  // sixth
+    { s: 12, d: 0.7 },  // octave
+    { s: 14, d: 0.5 },  // ninth
+    { s: 16, d: 1.0 },  // eleventh (peak — hold)
+    { s: 14, d: 0.5 },  // ninth
+    { s: 12, d: 0.5 },  // octave
+    { s:  9, d: 0.7 },  // sixth
+    { s:  7, d: 0.5 },  // fifth
+    { s:  5, d: 0.5 },  // fourth
+    { s:  4, d: 0.7 },  // third
+    { s:  2, d: 0.5 },  // second
+    { s:  0, d: 1.0 },  // root
+    { s:  4, d: 0.5 },  // third (gentle finish)
+    { s:  7, d: 0.5 },  // fifth
+    { s:  0, d: 2.0 },  // root (long hold — end D, loop back to A)
   ];
 
   // ── Bass patterns (8 quarter-note steps) ──
@@ -875,6 +1756,30 @@ const Music = (() => {
 
 
 let levelIdx=0, lives=3, snakes=[], COLS, ROWS, animating=false, hovered=null;
+
+// ─── SAVE / LOAD PROGRESS ────────────────────────────────────────────────────
+const SAVE_KEY = 'sneaky_progress_v1';
+
+function saveProgress() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      levelIdx,
+      seenObstacles: [...seenObstacles],
+    }));
+  } catch(e) {}
+}
+
+function loadProgress() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch(e) { return null; }
+}
+
+function clearProgress() {
+  try { localStorage.removeItem(SAVE_KEY); } catch(e) {}
+}
 let STONES=[], BOUNCERS=[], TUNNELS=[], NAVIGATORS=[], BUNNIES=[];
 // Obstacle hit animations: key = "type:r:c", value = {t: 0..1, type}
 const obsAnims = {};
@@ -908,8 +1813,14 @@ function loadLevel(idx) {
   Music.start(idx);
   buildDecor();
   document.getElementById('level-label').textContent=`Level ${idx+1}`;
-  document.getElementById('hint').textContent = 'Tap a snake to release it';
+
   updateHearts(); updateLevelNav(); fitCanvas(); render();
+
+  // Show snake intro on very first play (level 1, never seen)
+  if(idx === 0 && !seenObstacles.has('snake_intro')){
+    enqueueObstacleInfo(['snake_intro'], null);
+    return;
+  }
 
   // Show info for any new obstacles on this level
   const newTypes = [];
@@ -1549,24 +2460,23 @@ function drawSnake(s) {
   // head face (always visible unless all hidden)
   drawSnakeFace(pts[0], s.dirs[0], s.color, hovH, s.id+'h');
 
-  // frozen indicator — pulsing ring prompting player to tap
-  if(s.frozen){
-    const pulse = 0.6 + 0.4 * Math.sin(performance.now() / 220);
-    ctx.save();
-    ctx.globalAlpha = pulse;
-    ctx.beginPath(); ctx.arc(pts[0][0], pts[0][1], CELL*0.44, 0, Math.PI*2);
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
-    ctx.beginPath(); ctx.arc(pts[0][0], pts[0][1], CELL*0.44, 0, Math.PI*2);
-    ctx.strokeStyle = s.color; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.globalAlpha = 1;
-    ctx.restore();
-  }
-
   // tail end
   if(hidden === 0) {
     // tail fully visible
     if(s.dirs[1]) {
-      drawSnakeFace(pts[pts.length-1], s.dirs[1], s.color, hovT, s.id+'t');
+      // Compute the direction the tail-end face should point:
+      // it must point AWAY from the adjacent body cell (pts[length-2] → pts[length-1]).
+      // This keeps it correct during movement animation when the stored dirs[1]
+      // may no longer match the actual sliding geometry.
+      let tailDir = s.dirs[1];
+      if(pts.length >= 2) {
+        const t = pts[pts.length-1], p = pts[pts.length-2];
+        const dx = t[0]-p[0]; // positive = rightward (R)
+        const dy = t[1]-p[1]; // positive = downward  (D)
+        if(Math.abs(dx) >= Math.abs(dy)) tailDir = dx > 0 ? 'R' : 'L';
+        else                             tailDir = dy > 0 ? 'D' : 'U';
+      }
+      drawSnakeFace(pts[pts.length-1], tailDir, s.color, hovT, s.id+'t');
     } else {
       const t=pts[pts.length-1];
       ctx.beginPath(); ctx.arc(t[0],t[1],CELL*0.18,0,Math.PI*2);
@@ -1710,13 +2620,34 @@ function snakeBodyAtPixel(px,py,s){
 function snakeEndAtPixel(px,py){
   const c=Math.floor((px-PAD)/CELL), r=Math.floor((py-PAD)/CELL);
   if(r<0||r>=ROWS||c<0||c>=COLS) return null;
+
+  // Pass 1: exact head/tail cell matches (highest priority)
   for(const s of snakes){
     if(!s.alive) continue;
     const head=s.cells[0], tail=s.cells[s.cells.length-1];
     if(head.r===r&&head.c===c) return {snake:s, end:'head'};
     if(s.dirs[1] && tail.r===r&&tail.c===c) return {snake:s, end:'tail'};
+  }
+
+  // Pass 2: cell directly in front of a head/tail face
+  // (player taps where the face visually points toward)
+  for(const s of snakes){
+    if(!s.alive) continue;
+    const head=s.cells[0], tail=s.cells[s.cells.length-1];
+    const hFrontR=head.r+DR[s.dirs[0]], hFrontC=head.c+DC[s.dirs[0]];
+    if(hFrontR===r&&hFrontC===c) return {snake:s, end:'head'};
+    if(s.dirs[1]){
+      const tFrontR=tail.r+DR[s.dirs[1]], tFrontC=tail.c+DC[s.dirs[1]];
+      if(tFrontR===r&&tFrontC===c) return {snake:s, end:'tail'};
+    }
+  }
+
+  // Pass 3: single-headed snake body tap
+  for(const s of snakes){
+    if(!s.alive||s.dirs[1]) continue;
     if(s.cells.some(x=>x.r===r&&x.c===c)) return {snake:s, end:'head'};
   }
+
   return null;
 }
 
@@ -1729,21 +2660,62 @@ function patrolSpeed(obs) {
 }
 
 function updatePatrols(dt) {
+  // Build a set of all occupied cells (snake bodies + static obstacles)
+  // so patrols can't move through them.
+  function isCellBlocked(r, c, selfObs) {
+    // Round to nearest cell
+    const ri = Math.round(r), ci = Math.round(c);
+    // Snake bodies
+    for(const s of snakes){
+      if(!s.alive) continue;
+      for(const cell of s.cells){
+        if(cell.r===ri && cell.c===ci) return true;
+      }
+    }
+    // Other stones (not self)
+    for(const st of STONES){
+      if(st === selfObs) continue;
+      const sr=Math.round(st.pr??st.r), sc=Math.round(st.pc??st.c);
+      if(sr===ri && sc===ci) return true;
+    }
+    // Bouncers, tunnels, navigators
+    for(const b of BOUNCERS){ if(b.r===ri&&b.c===ci) return true; }
+    for(const pair of TUNNELS){ if((pair[0].r===ri&&pair[0].c===ci)||(pair[1].r===ri&&pair[1].c===ci)) return true; }
+    for(const n of NAVIGATORS){ if(n.r===ri&&n.c===ci) return true; }
+    return false;
+  }
+
   for(const s of STONES) {
     if(!s.patrol) continue;
-    s.pt += s.pdir * dt * patrolSpeed(s);
-    if(s.pt >= 1){ s.pt=1; s.pdir=-1; }
-    else if(s.pt <= 0){ s.pt=0; s.pdir=1; }
-    s.pr = s.patrol[0].r + (s.patrol[1].r - s.patrol[0].r) * s.pt;
-    s.pc = s.patrol[0].c + (s.patrol[1].c - s.patrol[0].c) * s.pt;
+    const newPt = s.pt + s.pdir * dt * patrolSpeed(s);
+    const clampedPt = Math.max(0, Math.min(1, newPt));
+    // Compute candidate position
+    const nr = s.patrol[0].r + (s.patrol[1].r - s.patrol[0].r) * clampedPt;
+    const nc = s.patrol[0].c + (s.patrol[1].c - s.patrol[0].c) * clampedPt;
+    // Only move if the cell we're heading toward isn't blocked
+    // Check the next integer cell in movement direction
+    const targetR = s.patrol[newPt>s.pt?1:0].r + (s.patrol[newPt>s.pt?0:1].r - s.patrol[newPt>s.pt?1:0].r) * 0;
+    if(!isCellBlocked(nr, nc, s)){
+      s.pt = clampedPt;
+      s.pr = nr;
+      s.pc = nc;
+    }
+    if(newPt >= 1){ s.pt=1; s.pdir=-1; }
+    else if(newPt <= 0){ s.pt=0; s.pdir=1; }
   }
   for(const b of BUNNIES) {
     if(!b.patrol || b.eaten) continue;
-    b.pt += b.pdir * dt * patrolSpeed(b);
-    if(b.pt >= 1){ b.pt=1; b.pdir=-1; }
-    else if(b.pt <= 0){ b.pt=0; b.pdir=1; }
-    b.pr = b.patrol[0].r + (b.patrol[1].r - b.patrol[0].r) * b.pt;
-    b.pc = b.patrol[0].c + (b.patrol[1].c - b.patrol[0].c) * b.pt;
+    const newPt = b.pt + b.pdir * dt * patrolSpeed(b);
+    const clampedPt = Math.max(0, Math.min(1, newPt));
+    const nr = b.patrol[0].r + (b.patrol[1].r - b.patrol[0].r) * clampedPt;
+    const nc = b.patrol[0].c + (b.patrol[1].c - b.patrol[0].c) * clampedPt;
+    if(!isCellBlocked(nr, nc, b)){
+      b.pt = clampedPt;
+      b.pr = nr;
+      b.pc = nc;
+    }
+    if(newPt >= 1){ b.pt=1; b.pdir=-1; }
+    else if(newPt <= 0){ b.pt=0; b.pdir=1; }
   }
 }
 
@@ -1795,12 +2767,32 @@ function deltaToDir(dr,dc){ return Object.keys(DR).find(k=>DR[k]===dr&&DC[k]===d
 
 function fireSnake(s, end){
   if(!s.alive) return;
-  // If this snake is frozen (just ate a bunny), resume it
+  // If this snake is frozen (just ate a bunny), resume it.
+  // For double-headed snakes the player can choose EITHER head to resume from —
+  // tapping the tail end reverses the snake first, then resumes from that end.
   if(s.frozen){
-    const {dr, dc, dir} = s.frozen;
+    const frozen = s.frozen;
     s.frozen = null;
     animating = true; hovered = null;
-    startMove(s, dr, dc, dir);
+    // If the player tapped the tail end of a double-headed snake, flip it so that
+    // end becomes the head and resume in its direction.
+    if(end === 'tail' && s.dirs.length === 2){
+      s.cells.reverse();
+      s.dirs.reverse();
+    }
+    // If the snake froze mid-tunnel-exit, resume the tunnel_exit animation
+    if(frozen.tunnelExit){
+      const {entry, exit_, hiddenCount} = frozen.tunnelExit;
+      s.tunnelHidden = hiddenCount;
+      const h=s.cells[0], nr2=h.r+frozen.dr, nc2=h.c+frozen.dc;
+      s.anim={dr:frozen.dr,dc:frozen.dc,progress:0,
+              nextCells:[{r:nr2,c:nc2},...s.cells.slice(0,-1)],
+              result:'tunnel_exit',tunnelEntry:entry,tunnelExit_:exit_,hiddenCount:hiddenCount};
+      runAnim();
+      return;
+    }
+    const [dr,dc] = dirDelta(s.dirs[0]);
+    startMove(s, dr, dc, s.dirs[0]);
     return;
   }
   if(animating) return;
@@ -1901,7 +2893,8 @@ function runAnim(){
       // ── ate a bunny → freeze, wait for player tap ──
       if(a.result==='eat_and_freeze'){
         Music.playSfx('eat');
-        s.frozen = {dr:a.pendingDr, dc:a.pendingDc, dir:a.pendingDir};
+        s.frozen = {dr:a.pendingDr, dc:a.pendingDc, dir:a.pendingDir,
+                    tunnelExit: a.pendingTunnelExit || null};
         animating = false;
         render(); checkWin(); return;
       }
@@ -1985,6 +2978,16 @@ function runAnim(){
         const w2=classifyStep(nr2,nc2,s.id,deltaToDir(a.dr,a.dc));
         if(w2==='stone'||w2==='snake_hit'){
           s.anim={dr:a.dr,dc:a.dc,progress:0,nextCells:[{r:nr2,c:nc2},...s.cells.slice(0,-1)],result:w2==='stone'?'stone':'collision'};
+        } else if(w2&&w2.eat_bunny){
+          // Bunny on the exit path — eat it and freeze.
+          // Store the tunnel_exit state in the frozen object so resume continues emerging.
+          w2.eat_bunny.eaten=true;
+          const d2=deltaToDir(a.dr,a.dc);
+          s.anim={dr:a.dr,dc:a.dc,progress:0,
+                  nextCells:[{r:nr2,c:nc2},...s.cells.slice(0,-1)],
+                  result:'eat_and_freeze',
+                  pendingDr:a.dr,pendingDc:a.dc,pendingDir:d2,
+                  pendingTunnelExit:{entry,exit_:exit,hiddenCount:hidden}};
         } else {
           s.anim={dr:a.dr,dc:a.dc,progress:0,nextCells:[{r:nr2,c:nc2},...s.cells.slice(0,-1)],
                   result:'tunnel_exit',tunnelEntry:entry,tunnelExit_:exit,hiddenCount:hidden};
@@ -2086,7 +3089,7 @@ function checkWin(){
   },400);
   else if(allSnakesGone && !allBunniesEaten){
     // Hint — bunnies remain
-    document.getElementById('hint').textContent='🐰 Feed all bunnies first!';
+
   }
 }
 function showOverlay(w){
@@ -2112,9 +3115,26 @@ canvas.addEventListener('pointerdown',e=>{
     const obs = obstacleAtPixel(px,py);
     if(obs){ enqueueObstacleInfo([obs], null); return; }
   }
-  // Allow tapping a frozen snake even while "animating" is false but a freeze is active
-  const frozenSnake = snakes.find(s=>s.alive&&s.frozen&&snakeBodyAtPixel(px,py,s));
-  if(frozenSnake){ fireSnake(frozenSnake, 'head'); return; }
+  // Allow tapping a frozen snake even while animating is false but a freeze is active
+  const frozenSnake = snakes.find(s=>{
+    if(!s.alive||!s.frozen) return false;
+    if(snakeBodyAtPixel(px,py,s)) return true;
+    // Also detect tap on the front cell of either head
+    const c2=Math.floor((px-PAD)/CELL), r2=Math.floor((py-PAD)/CELL);
+    const head=s.cells[0];
+    if(head.r+DR[s.dirs[0]]===r2 && head.c+DC[s.dirs[0]]===c2) return true;
+    if(s.dirs[1]){
+      const tail=s.cells[s.cells.length-1];
+      if(tail.r+DR[s.dirs[1]]===r2 && tail.c+DC[s.dirs[1]]===c2) return true;
+    }
+    return false;
+  });
+  if(frozenSnake){
+    // Detect which end was tapped so double-headed snakes can resume either way
+    const hitEnd = snakeEndAtPixel(px,py) || {snake:frozenSnake, end:'head'};
+    fireSnake(frozenSnake, hitEnd.snake===frozenSnake ? hitEnd.end : 'head');
+    return;
+  }
   if(animating) return;
   const hit=snakeEndAtPixel(px,py);
   if(hit) fireSnake(hit.snake, hit.end);
@@ -2142,6 +3162,12 @@ canvas.addEventListener('pointerleave',()=>{if(hovered){hovered=null;render();}}
 
 // ─── OBSTACLE INFO OVERLAY ───
 const OBSTACLE_INFO = {
+  snake_intro: {
+    name: 'Meet Sneaky!',
+    desc: 'Tap a snake\'s head to send it sliding in that direction.\nSome snakes have two heads — you choose which way to go!',
+    color: '#4ade80',
+    btnColor: '#16a34a',
+  },
   patrol_stone: {
     name: 'Patrol Stone',
     desc: 'A stone that moves back and forth!\nTime your snake carefully — hitting it still costs a heart.',
@@ -2208,8 +3234,13 @@ function showNextInfo() {
   seenObstacles.add(type);
 
   const badge = document.getElementById('info-badge');
-  badge.textContent = isNew ? 'New!' : 'Reminder';
-  badge.className = 'info-badge' + (isNew ? ' new' : '');
+  if(type === 'snake_intro'){
+    badge.textContent = 'How to play';
+    badge.className = 'info-badge new';
+  } else {
+    badge.textContent = isNew ? 'New!' : 'Reminder';
+    badge.className = 'info-badge' + (isNew ? ' new' : '');
+  }
 
   document.getElementById('info-name').textContent = info.name;
   document.getElementById('info-desc').textContent = info.desc;
@@ -2379,18 +3410,9 @@ function drawInfoIllustration(c, W, H, type){
       drawArrow2(c,sx+9,cy,bx-14,cy,'rgba(255,255,255,0.6)');
     }
     else if(loop<0.68){
-      // stopped — bunny eaten, snake frozen with pulsing ring
+      // stopped — bunny eaten, snake frozen
       const freeze=(loop-0.30)/0.38;
       drawMiniSnake(c,eatX,cy,3,'R','#fbbf24');
-      // pulsing ring
-      const pulse=0.5+0.5*Math.sin(t*6);
-      c.save();
-      c.globalAlpha=pulse*0.9;
-      c.beginPath(); c.arc(eatX,cy,11,0,Math.PI*2);
-      c.strokeStyle='#fff'; c.lineWidth=2.5; c.stroke();
-      c.beginPath(); c.arc(eatX,cy,11,0,Math.PI*2);
-      c.strokeStyle='#fbbf24'; c.lineWidth=1.2; c.stroke();
-      c.restore();
       // tap hint
       const tapAlpha=0.5+0.5*Math.sin(t*3);
       c.save(); c.globalAlpha=tapAlpha;
@@ -2434,6 +3456,64 @@ function drawInfoIllustration(c, W, H, type){
     drawMiniSnake(c,18,cy,2,'R','#34d399');
     c.font='bold 10px sans-serif'; c.fillStyle='rgba(255,255,255,0.55)';
     c.textAlign='center'; c.fillText('intercept the bunny!',W/2,H-9);
+  }
+
+  else if(type==='snake_intro'){
+    // Phase 0–0.35: Sneaky rests, arrow pulses toward head
+    // Phase 0.35–0.55: tap flash
+    // Phase 0.55–0.90: Sneaky slides right and exits
+    // Phase 0.90–1.00: resets
+    const loop = (t % 3.4) / 3.4;
+    const color = '#4ade80';
+    const headX = cx + 18;  // head is at right end
+    const sy = cy;
+    const len = 5;          // 5 segments, matches other cards
+
+    if(loop < 0.35){
+      // Resting — draw snake, pulsing arrow pointing at head
+      drawMiniSnake(c, headX, sy, len, 'R', color);
+      const arrowAlpha = 0.55 + 0.45 * Math.sin(t * 4);
+      drawArrow2(c, headX - len*17 - 14, sy, headX - 10, sy, 'rgba(255,255,255,0.75)', arrowAlpha);
+    }
+    else if(loop < 0.55){
+      // Tap flash
+      drawMiniSnake(c, headX, sy, len, 'R', color);
+      const f = Math.sin((loop - 0.35) / 0.20 * Math.PI);
+      c.save(); c.globalAlpha = f * 0.85;
+      c.beginPath(); c.arc(headX, sy, 14, 0, Math.PI*2);
+      c.fillStyle = 'rgba(255,255,255,0.35)'; c.fill();
+      c.restore();
+      // tap emoji descends
+      const ey = sy - 26 + f * 18;
+      c.save(); c.globalAlpha = f;
+      c.font = '16px sans-serif'; c.textAlign = 'center';
+      c.fillText('👆', headX + 2, ey);
+      c.restore();
+    }
+    else if(loop < 0.90){
+      // Slide right and off screen
+      const p = (loop - 0.55) / 0.35;
+      const slideX = headX + p * (W + len*17 + 10);
+      const alpha = Math.max(0, 1 - (p - 0.65) / 0.35);
+      drawMiniSnake(c, slideX, sy, len, 'R', color, alpha);
+      // Speed lines
+      if(p > 0.04){
+        c.save(); c.globalAlpha = Math.min(0.5, p * 1.5) * (1 - p);
+        c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 1.5; c.lineCap = 'round';
+        for(const dy of [-7, 0, 7]){
+          c.beginPath();
+          c.moveTo(headX - len*17 + 4, sy + dy);
+          c.lineTo(headX - len*17 - 18, sy + dy);
+          c.stroke();
+        }
+        c.restore();
+      }
+    }
+    else {
+      // Fade in from left
+      const p = (loop - 0.90) / 0.10;
+      drawMiniSnake(c, headX - (1-p)*30, sy, len, 'R', color, p);
+    }
   }
 }
 
@@ -2670,6 +3750,7 @@ window.addEventListener('resize',()=>{fitCanvas();render();});
 // ─── BUTTONS ───
 document.getElementById('btn-next').addEventListener('click',()=>{
   hideOverlays(); lives=3; levelIdx=(levelIdx+1)%LEVELS.length; loadLevel(levelIdx);
+  saveProgress();
 });
 document.getElementById('btn-restart').addEventListener('click',()=>{
   hideOverlays(); lives=3; loadLevel(levelIdx);
@@ -2697,22 +3778,43 @@ const WelcomeMusic = (() => {
 
   // ── Hand-composed melody in C major pentatonic ──
   // Each entry: [semitones above C4, duration in beats, velocity 0–1]
-  // Two 16-beat phrases that repeat. Slow, singable, memorable.
+  // Three 32-beat sections (A, B, C) that repeat. Slow, singable, memorable.
   const MEL = [
-    // Phrase A — gentle rise and curl
+    // ── Section A — gentle rise and curl ──
     [0,  1,  0.80], [4,  0.5,0.65], [7,  0.5,0.70], [9,  1.5,0.85],
     [7,  0.5,0.60], [4,  0.5,0.65], [5,  1,  0.70], [4,  1,  0.75],
     [2,  0.5,0.60], [4,  0.5,0.65], [7,  1,  0.80], [9,  2,  0.90],
     [7,  0.5,0.55], [5,  0.5,0.60], [4,  1,  0.70], [0,  2,  0.85],
-    // Phrase B — climbs to the octave, floats back
+    // Phrase A2 — steps up, dances at the top
     [5,  1,  0.70], [7,  0.5,0.65], [9,  0.5,0.75], [12, 1.5,0.90],
     [9,  0.5,0.60], [7,  0.5,0.65], [5,  1,  0.70], [4,  1,  0.75],
     [7,  1,  0.75], [9,  0.5,0.65], [12, 0.5,0.80], [14, 2,  0.95],
     [12, 0.5,0.60], [9,  0.5,0.65], [7,  1,  0.72], [0,  3,  0.88],
+    // ── Section B — bridge: lower, wistful, unexpected ──
+    [-3, 1,  0.72], [0,  0.5,0.60], [2,  0.5,0.65], [4,  1.5,0.78],
+    [2,  0.5,0.58], [0,  0.5,0.62], [2,  1,  0.68], [-3, 1,  0.72],
+    [-5, 2,  0.75], [0,  0.5,0.60], [4,  0.5,0.65], [7,  1.5,0.82],
+    [5,  0.5,0.58], [4,  0.5,0.62], [2,  1,  0.68], [0,  2,  0.80],
+    // Phrase B2 — lilting triplet feel
+    [4,  0.5,0.70], [7,  0.5,0.68], [9,  1,  0.80], [7,  0.5,0.65],
+    [5,  0.5,0.62], [4,  1,  0.70], [2,  0.5,0.60], [0,  0.5,0.65],
+    [4,  1,  0.72], [5,  0.5,0.65], [7,  0.5,0.70], [9,  2,  0.88],
+    [7,  0.5,0.60], [5,  0.5,0.65], [4,  1,  0.70], [2,  3,  0.82],
+    // ── Section C — climax: soars high, cascades back ──
+    [7,  0.5,0.75], [9,  0.5,0.78], [12, 1,  0.85], [14, 0.5,0.80],
+    [16, 2,  0.95], [14, 0.5,0.68], [12, 0.5,0.72], [9,  1,  0.78],
+    [7,  0.5,0.65], [5,  0.5,0.68], [4,  1,  0.75], [2,  0.5,0.62],
+    [4,  1,  0.72], [7,  0.5,0.68], [9,  0.5,0.75], [12, 2,  0.90],
+    // Phrase C2 — returns home with grace
+    [9,  1,  0.80], [7,  0.5,0.68], [5,  0.5,0.65], [4,  1.5,0.78],
+    [5,  0.5,0.62], [7,  0.5,0.68], [9,  1,  0.75], [7,  1,  0.72],
+    [5,  0.5,0.65], [4,  0.5,0.68], [2,  1,  0.72], [0,  2,  0.85],
+    [4,  0.5,0.68], [7,  0.5,0.72], [4,  1,  0.70], [0,  4,  0.90],
   ];
 
   // ── Counter-melody (lower, quieter, fills gaps) ──
   const COUNTER = [
+    // Section A counter
     [-5, 2, 0.30], [0,  1, 0.25], [-3, 1, 0.28], [-5, 2, 0.30],
     [-7, 2, 0.28], [-5, 1, 0.25], [-3, 1, 0.28], [-5, 2, 0.30],
     [-3, 2, 0.28], [-5, 1, 0.25], [0,  1, 0.30], [-3, 2, 0.28],
@@ -2721,6 +3823,24 @@ const WelcomeMusic = (() => {
     [-3, 2, 0.28], [-5, 1, 0.25], [-3, 1, 0.28], [-5, 2, 0.30],
     [-3, 2, 0.28], [0,  1, 0.30], [-3, 1, 0.28], [-1, 2, 0.32],
     [-5, 2, 0.30], [-7, 1, 0.25], [-5, 1, 0.28], [-12,4, 0.35],
+    // Section B counter — slower, more space
+    [-8, 2, 0.28], [-5, 1, 0.25], [-3, 1, 0.28], [-5, 3, 0.30],
+    [-7, 2, 0.26], [-8, 1, 0.23], [-5, 1, 0.26], [-8, 2, 0.30],
+    [-12,3, 0.32], [-7, 1, 0.25], [-5, 1, 0.28], [-3, 2, 0.30],
+    [-5, 2, 0.28], [-7, 1, 0.25], [-8, 1, 0.26], [-12,4, 0.33],
+    [-5, 2, 0.28], [-3, 1, 0.25], [-5, 1, 0.28], [-3, 2, 0.30],
+    [-5, 2, 0.26], [-7, 1, 0.23], [-5, 1, 0.26], [-8, 2, 0.28],
+    [-3, 2, 0.28], [-5, 1, 0.25], [-3, 1, 0.28], [-1, 3, 0.32],
+    [-5, 2, 0.28], [-7, 1, 0.25], [-8, 1, 0.26], [-12,4, 0.35],
+    // Section C counter — active, driving
+    [-5, 1, 0.30], [-3, 1, 0.28], [-5, 1, 0.30], [-7, 2, 0.32],
+    [-8, 3, 0.35], [-5, 1, 0.28], [-3, 1, 0.28], [-5, 2, 0.30],
+    [-7, 1, 0.28], [-8, 1, 0.26], [-5, 1, 0.28], [-7, 1, 0.30],
+    [-5, 2, 0.28], [-3, 1, 0.25], [-5, 1, 0.28], [-3, 3, 0.32],
+    [-3, 2, 0.28], [-5, 1, 0.25], [-7, 1, 0.28], [-5, 2, 0.30],
+    [-3, 2, 0.26], [-5, 1, 0.23], [-3, 1, 0.26], [-1, 2, 0.30],
+    [-5, 2, 0.28], [-3, 1, 0.25], [-5, 1, 0.28], [-7, 2, 0.30],
+    [-12,2, 0.32], [-7, 1, 0.28], [-5, 1, 0.28], [-12,5, 0.38],
   ];
 
   // ── Bass: root-fifth arpeggios, one per beat ──
@@ -2807,35 +3927,46 @@ const WelcomeMusic = (() => {
     seq = setTimeout(scheduleAhead, 60);
   }
 
-  // Create AudioContext immediately — it starts suspended but notes can be pre-scheduled
+  // Create AudioContext immediately — it starts suspended
   ac = new (window.AudioContext || window.webkitAudioContext)();
-  master = ac.createGain();
-  master.gain.setValueAtTime(0, ac.currentTime);
-  master.gain.linearRampToValueAtTime(0.42, ac.currentTime + 2.5);
   const rev = makeReverb(ac);
   const revGain = ac.createGain(); revGain.gain.value = 0.38;
-  master.connect(revGain); revGain.connect(rev); rev.connect(ac.destination);
-  master.connect(ac.destination);
 
-  // Pre-schedule notes from time 0 — will play immediately when context resumes
-  nextTime = 0.05;
-  beatPos = 0; melStep = 0; counterStep = 0;
-  scheduleAhead();
+  function initGraph() {
+    master = ac.createGain();
+    master.gain.setValueAtTime(0, ac.currentTime);
+    master.gain.linearRampToValueAtTime(0.42, ac.currentTime + 2.5);
+    master.connect(revGain); revGain.connect(rev); rev.connect(ac.destination);
+    master.connect(ac.destination);
+  }
 
-  // Resume on any user gesture — notes play right away since they're pre-scheduled
+  function beginPlayback() {
+    if (!master) initGraph();
+    nextTime = ac.currentTime + 0.05;
+    beatPos = 0; melStep = 0; counterStep = 0;
+    scheduleAhead();
+  }
+
+  // Resume on any user gesture and start scheduling from that moment
+  let started = false;
   function resumeOnGesture() {
-    if (ac.state === 'suspended') ac.resume();
+    if (started) return;
+    started = true;
     document.removeEventListener('pointerdown', resumeOnGesture, true);
     document.removeEventListener('keydown',     resumeOnGesture, true);
     document.removeEventListener('touchstart',  resumeOnGesture, true);
+    if (ac.state === 'suspended') {
+      ac.resume().then(beginPlayback);
+    } else {
+      beginPlayback();
+    }
   }
   document.addEventListener('pointerdown', resumeOnGesture, true);
   document.addEventListener('keydown',     resumeOnGesture, true);
   document.addEventListener('touchstart',  resumeOnGesture, true);
 
   function start() {
-    // Already running — just ensure resumed
-    if (ac && ac.state === 'suspended') ac.resume();
+    resumeOnGesture();
   }
 
   function stop() {
@@ -3149,12 +4280,56 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{
 
   const welcomeEl = document.getElementById('welcome-screen');
   const btnStart  = document.getElementById('btn-start');
+  const btnRestartFresh = document.getElementById('btn-restart-fresh');
+  const welcomeProgress = document.getElementById('welcome-progress');
+  const confirmOverlay = document.getElementById('confirm-overlay');
+  const confirmYes = document.getElementById('confirm-yes');
+  const confirmCancel = document.getElementById('confirm-cancel');
 
+  // ── Check for saved progress ──────────────────────────────────────────────
+  const saved = loadProgress();
+  if (saved && saved.levelIdx > 0) {
+    // Restore seen obstacles so tutorials don't re-fire
+    if (Array.isArray(saved.seenObstacles)) {
+      saved.seenObstacles.forEach(t => seenObstacles.add(t));
+    }
+    levelIdx = Math.min(saved.levelIdx, LEVELS.length - 1);
+    loadLevel(levelIdx);
+
+    // Update button labels
+    btnStart.textContent = '▶ Continue Playing';
+    welcomeProgress.textContent = `Level ${levelIdx + 1} of ${LEVELS.length}`;
+    welcomeProgress.style.display = 'block';
+    btnRestartFresh.style.display = 'block';
+  }
+
+  // ── Play / Continue ───────────────────────────────────────────────────────
   btnStart.addEventListener('click', () => {
     welcomeEl.classList.add('hide');
     welcomeRunning = false;
     WelcomeMusic.stop();
     Music.unlock();
+  });
+
+  // ── Start from Beginning → show confirm ──────────────────────────────────
+  btnRestartFresh.addEventListener('click', () => {
+    confirmOverlay.classList.add('show');
+  });
+
+  confirmCancel.addEventListener('click', () => {
+    confirmOverlay.classList.remove('show');
+  });
+
+  confirmYes.addEventListener('click', () => {
+    confirmOverlay.classList.remove('show');
+    clearProgress();
+    seenObstacles.clear();
+    levelIdx = 0;
+    loadLevel(0);
+    // Reset button labels back to first-time state
+    btnStart.textContent = '▶ Play';
+    welcomeProgress.style.display = 'none';
+    btnRestartFresh.style.display = 'none';
   });
 }));
 
