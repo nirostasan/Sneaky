@@ -88,7 +88,7 @@
     opacity: 0; pointer-events: none;
     transition: opacity .25s;
   }
-  #oh-no-toast.show { opacity: 1; }
+  #oh-no-toast.show { opacity: 1; pointer-events: all; }
   #oh-no-icon { animation: popIn .35s cubic-bezier(.36,.07,.19,.97) both; }
   #oh-no-icon canvas { display: block; }
   #oh-no-msg {
@@ -1842,7 +1842,9 @@ const Music = (() => {
     ac = new (window.AudioContext || window.webkitAudioContext)();
     masterGain = ac.createGain();
     masterGain.gain.setValueAtTime(0, ac.currentTime);
-    masterGain.gain.linearRampToValueAtTime(0.38, ac.currentTime + 2.0);
+    // Only ramp up if not muted
+    const targetVol = (typeof _muted !== 'undefined' && _muted) ? 0 : 0.38;
+    masterGain.gain.linearRampToValueAtTime(targetVol, ac.currentTime + 2.0);
     reverbNode = makeReverb(ac);
     const reverbGain = ac.createGain(); reverbGain.gain.value = 0.22;
     masterGain.connect(reverbGain); reverbGain.connect(reverbNode); reverbNode.connect(ac.destination);
@@ -1851,6 +1853,7 @@ const Music = (() => {
 
   function playNote(freq, wave, vol, attack, hold, release, when, filter, detune) {
     if (!ac) return;
+    if (typeof _muted !== 'undefined' && _muted) return;
     const osc = ac.createOscillator();
     const g   = ac.createGain();
     const lp  = ac.createBiquadFilter();
@@ -1945,7 +1948,8 @@ const Music = (() => {
       const now = ac.currentTime;
       masterGain.gain.cancelScheduledValues(now);
       masterGain.gain.setValueAtTime(masterGain.gain.value, now);
-      masterGain.gain.linearRampToValueAtTime(0.38, now + 0.6);
+      const targetVol = (typeof _muted !== 'undefined' && _muted) ? 0 : 0.38;
+      masterGain.gain.linearRampToValueAtTime(targetVol, now + 0.6);
     }
     seqNextTime = ac.currentTime + 0.65;
     tick();
@@ -1960,6 +1964,7 @@ const Music = (() => {
 
   function playSfx(type) {
     if (!ac) return;
+    if (typeof _muted !== 'undefined' && _muted) return;
     const now = ac.currentTime;
     const f = v ? v.filterHz : 1000;
     const root = v ? v.root : 60;
@@ -3593,6 +3598,7 @@ let _gameoverDizzyStop = null;
 function showOhNo(onDone, message){
   const toast = document.getElementById('oh-no-toast');
   toast.classList.add('show');
+  animating = true; // block all game interaction while toast is visible
   const msg = document.getElementById('oh-no-msg');
   msg.innerHTML = message || "Oh no! That's not the right way.<br>Let's try this again!";
   msg.style.animation='none';
@@ -3604,6 +3610,7 @@ function showOhNo(onDone, message){
   setTimeout(()=>{
     toast.classList.remove('show');
     stop();
+    animating = false;
     setTimeout(onDone, 260);
   }, 2200);
 }
