@@ -3350,7 +3350,7 @@ function runAnim(){
           // whole snake is inside — teleport all cells to exit, start emerging
           s.cells = s.cells.map(()=>({r:exit.r,c:exit.c}));
           s.tunnelHidden = s.cells.length;
-          // first emerge step: head moves one cell past exit
+          // first emerge step: head moves one cell past exit — handle ALL obstacle types
           const h=s.cells[0], nr2=h.r+a.dr, nc2=h.c+a.dc;
           const curDir=deltaToDir(a.dr,a.dc);
           const w2=classifyStep(nr2,nc2,s.id,curDir);
@@ -3358,8 +3358,23 @@ function runAnim(){
             if(w2==='stone') triggerObsAnim(`stone:${nr2}:${nc2}`,'stone_hit',0.5);
             Music.playSfx('stone');
             s.anim={dr:a.dr,dc:a.dc,progress:0,nextCells:[{r:nr2,c:nc2},...s.cells.slice(0,-1)],result:w2==='stone'?'stone':'collision'};
+          } else if(w2&&w2.navigate){
+            triggerObsAnim(`nav:${nr2}:${nc2}`,'nav_hit',0.4);
+            Music.playSfx('navigate');
+            s.anim={dr:a.dr,dc:a.dc,progress:0,nextCells:[{r:nr2,c:nc2},...s.cells.slice(0,-1)],
+                    result:'navigate',newDir:w2.navigate};
+          } else if(w2&&w2.eat_bunny){
+            w2.eat_bunny.eaten=true;
+            triggerObsAnim(`bunny:${nr2}:${nc2}`,'bunny_eat',0.55);
+            Music.playSfx('eat');
+            s.anim={dr:a.dr,dc:a.dc,progress:0,nextCells:[{r:nr2,c:nc2},...s.cells.slice(0,-1)],
+                    result:'eat_and_freeze',pendingDr:a.dr,pendingDc:a.dc,pendingDir:curDir};
+          } else if(w2==='bounce'){
+            triggerObsAnim(`bouncer:${nr2}:${nc2}`,'bouncer_hit',0.5);
+            Music.playSfx('bounce');
+            s.anim={dr:a.dr,dc:a.dc,progress:0,nextCells:[{r:nr2,c:nc2},...s.cells.slice(0,-1)],result:'bounce'};
           } else {
-            // All other interactions handled when snake fully emerges (hidden reaches 0)
+            // free / exit — normal emerge
             s.anim={dr:a.dr,dc:a.dc,progress:0,nextCells:[{r:nr2,c:nc2},...s.cells.slice(0,-1)],
                     result:'tunnel_exit', tunnelEntry:entry, tunnelExit_:exit,
                     hiddenCount:s.cells.length-1};
